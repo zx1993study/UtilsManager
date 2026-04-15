@@ -1,0 +1,6 @@
+{
+  "name": "自动化测试管理平台",
+  "description": "一个全面的自动化测试管理平台，包含用户管理、字典配置、接口管理、流程编排和测试报告功能。",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

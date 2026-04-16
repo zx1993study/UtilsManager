@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, Search, Folder, Edit2, Trash2, Globe, Hash } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,12 +21,14 @@ interface Project {
   name: string;
   address: string;
   port: string;
+  environment: string;
+  remark: string;
 }
 
 export default function ProjectsPage() {
   const [projects, setProjects] = React.useState<Project[]>([
-    { id: '1', name: '电商平台项目', address: 'https://api.mall.example.com', port: '443' },
-    { id: '2', name: '用户中心系统', address: 'http://192.168.1.100', port: '8080' },
+    { id: '1', name: '电商平台项目', address: 'https://api.mall.example.com', port: '443', environment: '开发环境', remark: '电商核心系统' },
+    { id: '2', name: '用户中心系统', address: 'http://192.168.1.100', port: '8080', environment: '测试环境', remark: '用户管理模块' },
   ]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
@@ -35,7 +38,9 @@ export default function ProjectsPage() {
   const [formData, setFormData] = React.useState({
     name: '',
     address: '',
-    port: ''
+    port: '',
+    environment: '',
+    remark: ''
   });
 
   const handleOpenDialog = (project?: Project) => {
@@ -44,11 +49,13 @@ export default function ProjectsPage() {
       setFormData({
         name: project.name,
         address: project.address,
-        port: project.port
+        port: project.port,
+        environment: project.environment,
+        remark: project.remark
       });
     } else {
       setEditingProject(null);
-      setFormData({ name: '', address: '', port: '' });
+      setFormData({ name: '', address: '', port: '', environment: '', remark: '' });
     }
     setIsDialogOpen(true);
   };
@@ -127,6 +134,24 @@ export default function ProjectsPage() {
                   placeholder="例如：8080"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="environment">项目环境</Label>
+                <Input
+                  id="environment"
+                  value={formData.environment}
+                  onChange={(e) => setFormData({ ...formData, environment: e.target.value })}
+                  placeholder="例如：开发环境"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="remark">备注</Label>
+                <Input
+                  id="remark"
+                  value={formData.remark}
+                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                  placeholder="例如：电商核心系统"
+                />
+              </div>
               <DialogFooter>
                 <Button type="submit">{editingProject ? '保存修改' : '立即添加'}</Button>
               </DialogFooter>
@@ -142,13 +167,15 @@ export default function ProjectsPage() {
               <TableHead>项目名称</TableHead>
               <TableHead>项目地址</TableHead>
               <TableHead>项目端口</TableHead>
+              <TableHead>项目环境</TableHead>
+              <TableHead>备注</TableHead>
               <TableHead className="w-[150px]">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {projects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   暂无项目信息
                 </TableCell>
               </TableRow>
@@ -173,6 +200,12 @@ export default function ProjectsPage() {
                       {project.port}
                     </div>
                   </TableCell>
+                  <TableCell className="text-sm">
+                    <Badge variant="outline" className={project.environment === '开发环境' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}>
+                      {project.environment || '-'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{project.remark || '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(project)}>

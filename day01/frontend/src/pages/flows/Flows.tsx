@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Search, GitBranch, Eye, Edit2, Trash2, Calendar, User, ListChecks, X } from 'lucide-react';
+import { Plus, Search, GitBranch, Eye, Edit2, Trash2, Calendar, User, ListChecks, X, ClipboardCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -32,6 +32,7 @@ interface Flow {
   structuredSteps: Step[];
   expectedResult: string;
   actualResult: string;
+  testStatus: 'pending' | 'success' | 'failed';
   createdAt: string;
   creator: string;
 }
@@ -56,6 +57,7 @@ export default function FlowsPage() {
       ],
       expectedResult: '订单状态变为“已支付”，库存扣减成功',
       actualResult: '订单状态变为“已支付”，库存扣减成功',
+      testStatus: 'success',
       createdAt: '2024-03-20 10:30',
       creator: '张三'
     },
@@ -68,6 +70,7 @@ export default function FlowsPage() {
       ],
       expectedResult: '成功重置密码并能用新密码登录',
       actualResult: '验证码邮件延迟较大',
+      testStatus: 'failed',
       createdAt: '2024-03-21 14:15',
       creator: '李四'
     }
@@ -76,6 +79,7 @@ export default function FlowsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = React.useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
+  const [isResultDialogOpen, setIsResultDialogOpen] = React.useState(false);
   const [currentFlow, setCurrentFlow] = React.useState<Flow | null>(null);
 
   const [formData, setFormData] = React.useState({
@@ -124,6 +128,7 @@ export default function FlowsPage() {
       steps: formData.structuredSteps.map((s, i) => `${i + 1}. ${interfaces.find(it => it.id === s.interfaceId)?.name || '未知接口'}`).join('\n'),
       expectedResult: formData.expectedResult,
       actualResult: formData.actualResult,
+      testStatus: 'pending',
       createdAt: new Date().toLocaleString(),
       creator: '当前用户'
     };
@@ -156,6 +161,11 @@ export default function FlowsPage() {
   const openView = (flow: Flow) => {
     setCurrentFlow(flow);
     setIsViewDialogOpen(true);
+  };
+
+  const openResult = (flow: Flow) => {
+    setCurrentFlow(flow);
+    setIsResultDialogOpen(true);
   };
 
   const openEdit = (flow: Flow) => {
@@ -311,9 +321,9 @@ export default function FlowsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>流程名称</TableHead>
-              <TableHead>流程步骤</TableHead>
               <TableHead>预期结果</TableHead>
               <TableHead>实际结果</TableHead>
+              <TableHead>测试结果</TableHead>
               <TableHead>创建时间</TableHead>
               <TableHead>创建人</TableHead>
               <TableHead className="w-[200px]">操作</TableHead>
@@ -328,15 +338,24 @@ export default function FlowsPage() {
                     {flow.name}
                   </div>
                 </TableCell>
-                <TableCell className="max-w-[200px] truncate text-muted-foreground text-xs">
-                  {flow.steps}
-                </TableCell>
                 <TableCell className="max-w-[150px] truncate text-sm">
                   {flow.expectedResult}
                 </TableCell>
                 <TableCell className="max-w-[150px] truncate">
                   <Badge variant={flow.actualResult === flow.expectedResult ? "secondary" : "outline"} className={flow.actualResult === flow.expectedResult ? "bg-green-100 text-green-700 hover:bg-green-100" : "text-red-500"}>
                     {flow.actualResult}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge 
+                    variant={flow.testStatus === 'success' ? 'secondary' : 'outline'} 
+                    className={
+                      flow.testStatus === 'success' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 
+                      flow.testStatus === 'failed' ? 'bg-red-50 text-red-600 border-red-200' : 
+                      'bg-slate-100 text-slate-600 border-slate-200'
+                    }
+                  >
+                    {flow.testStatus === 'success' ? '成功' : flow.testStatus === 'failed' ? '失败' : '未开始'}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
@@ -353,13 +372,16 @@ export default function FlowsPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(flow)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(flow)} title="查看详情">
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(flow)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => openResult(flow)} title="查看结果">
+                      <ClipboardCheck className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(flow)} title="编辑">
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(flow.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(flow.id)} title="删除">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -546,6 +568,120 @@ export default function FlowsPage() {
           </div>
           <DialogFooter>
             <Button onClick={handleEdit}>保存修改</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Result Dialog */}
+      <Dialog open={isResultDialogOpen} onOpenChange={setIsResultDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-blue-600" />
+              测试结果报告
+            </DialogTitle>
+            <DialogDescription>查看流程执行的详细结果与日志。</DialogDescription>
+          </DialogHeader>
+          {currentFlow && (
+            <div className="space-y-6 py-4">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">流程名称</p>
+                  <p className="font-bold text-lg">{currentFlow.name}</p>
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="text-sm text-muted-foreground">测试状态</p>
+                  <Badge 
+                    variant={currentFlow.actualResult === currentFlow.expectedResult ? "secondary" : "outline"} 
+                    className={currentFlow.actualResult === currentFlow.expectedResult ? "bg-green-100 text-green-700 border-green-200 px-3 py-1" : "bg-red-50 text-red-600 border-red-200 px-3 py-1"}
+                  >
+                    {currentFlow.actualResult === currentFlow.expectedResult ? (
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> 测试通过</span>
+                    ) : (
+                      <span className="flex items-center gap-1"><AlertCircle className="w-3 h-3" /> 测试异常</span>
+                    )}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-green-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> 预期结果
+                  </Label>
+                  <div className="p-3 rounded-md bg-green-50 border border-green-100 text-sm min-h-[80px]">
+                    {currentFlow.expectedResult}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className={currentFlow.actualResult === currentFlow.expectedResult ? "text-blue-700 flex items-center gap-1" : "text-red-700 flex items-center gap-1"}>
+                    {currentFlow.actualResult === currentFlow.expectedResult ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                    实际结果
+                  </Label>
+                  <div className={`p-3 rounded-md border text-sm min-h-[80px] ${currentFlow.actualResult === currentFlow.expectedResult ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+                    {currentFlow.actualResult}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">执行日志与截图</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left: Execution Steps */}
+                  <div className="bg-slate-950 text-slate-200 p-4 rounded-md font-mono text-[10px] space-y-2 max-h-[300px] overflow-y-auto border border-slate-800">
+                    <div className="pb-2 border-b border-slate-800 mb-2">
+                      <p className="text-slate-500">[{currentFlow.createdAt}] 初始化测试环境...</p>
+                      <p className="text-green-400">[{currentFlow.createdAt}] 环境检查通过</p>
+                    </div>
+                    
+                    {currentFlow.structuredSteps.map((step, i) => (
+                      <div key={step.id} className="space-y-1 pb-2 border-b border-slate-900 last:border-0">
+                        <div className="flex justify-between items-start">
+                          <p className="text-blue-400 font-bold">步骤 {i + 1}</p>
+                          <span className="text-green-400 bg-green-400/10 px-1 rounded text-[8px]">SUCCESS</span>
+                        </div>
+                        <p className="text-slate-300 truncate">接口: {interfaces.find(it => it.id === step.interfaceId)?.name}</p>
+                        <p className="text-slate-500 truncate">参数: {step.params || '{}'}</p>
+                      </div>
+                    ))}
+                    
+                    <div className="pt-2 border-t border-slate-800 mt-2">
+                      <p className="text-slate-500">[{currentFlow.createdAt}] 测试执行完毕</p>
+                      <p className={currentFlow.actualResult === currentFlow.expectedResult ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                        最终结论: {currentFlow.actualResult === currentFlow.expectedResult ? "SUCCESS" : "FAILED"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right: Screenshot */}
+                  <div className="space-y-2">
+                    <div className="relative aspect-video rounded-md border bg-muted overflow-hidden group">
+                      <img 
+                        src={`https://picsum.photos/seed/${currentFlow.id}/800/450`} 
+                        alt="Execution Screenshot" 
+                        className="object-cover w-full h-full"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button variant="secondary" size="sm" className="h-7 text-[10px]">查看大图</Button>
+                      </div>
+                      <div className="absolute bottom-2 right-2">
+                        <Badge className="bg-black/60 text-[8px] h-4">执行完毕截图</Badge>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground text-center italic">
+                      截图时间: {currentFlow.createdAt}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsResultDialogOpen(false)}>关闭</Button>
+            <Button className="gap-2" onClick={() => toast.info('正在重新运行测试...')}>
+              <GitBranch className="w-4 h-4" />
+              重新运行
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

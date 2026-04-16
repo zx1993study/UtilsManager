@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Search, Key, Play, Copy, Folder } from 'lucide-react';
+import { Plus, Search, Key, Play, Copy, Folder, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -75,6 +75,12 @@ export default function TokenPage() {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('Token 已复制到剪贴板');
+  };
+  
+  // 处理删除
+  const handleDelete = (id: number) => {
+    setTokens(tokens.filter(item => item.id !== id));
+    toast.success('Token 已删除');
   };
 
   return (
@@ -212,6 +218,10 @@ export default function TokenPage() {
                     <Button variant="ghost" size="sm" className="gap-1 h-8">
                       <Play className="w-3 h-3 fill-current" />
                       刷新
+                    </Button>
+                    <Button variant="ghost" size="sm" className="gap-1 h-8 text-red-500" onClick={() => handleDelete(item.id)}>
+                      <Trash2 className="w-3 h-3" />
+                      删除
                     </Button>
                   </div>
                 </TableCell>

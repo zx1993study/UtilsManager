@@ -2,16 +2,17 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import Layout from '@/components/Layout';
-import Login from '@/pages/Login';
-import Dashboard from '@/pages/Dashboard';
-import Users from '@/pages/Users';
-import Projects from '@/pages/Projects';
-import Dictionaries from '@/pages/Dictionaries';
+import Login from '@/pages/login/Login';
+import Dashboard from '@/pages/dashboard/Dashboard';
+import Users from '@/pages/users/Users';
+import Projects from '@/pages/projects/Projects';
+import Dictionaries from '@/pages/dictionaries/Dictionaries';
 import Interfaces from '@/pages/Interfaces';
-import Flows from '@/pages/Flows';
-import Tokens from '@/pages/Tokens';
-import Workflows from '@/pages/Workflows';
-import Reports from '@/pages/Reports';
+import Pages from '@/pages/pages/Pages';
+import Flows from '@/pages/flows/Flows';
+import Tokens from '@/pages/tokens/Tokens';
+import Workflows from '@/pages/workflows/Workflows';
+import Reports from '@/pages/reports/Reports';
 
 // Simple auth wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -84,6 +85,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Interfaces />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pages"
+          element={
+            <ProtectedRoute>
+              <Pages />
             </ProtectedRoute>
           }
         />

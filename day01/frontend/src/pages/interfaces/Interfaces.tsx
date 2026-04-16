@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Search, Globe, Code, Play, Edit2, Copy, CheckSquare, Square } from 'lucide-react';
+import { Plus, Search, Globe, Code, Play, Edit2, Copy, CheckSquare, Square, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,15 +17,65 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import InterfaceParamsPage from './InterfaceParams';
+
+const mockInterfaces = [
+  { 
+    id: 1, 
+    name: '获取用户资料', 
+    url: '/v1/users/me', 
+    method: 'GET', 
+    paramType: 'Query', 
+    tokenName: '开发环境 Token', 
+    expectedResult: '{"code": 200, "data": {"name": "Admin"}}',
+    actualResult: '{"code": 200, "data": {"name": "Admin"}}',
+    testStatus: 'success',
+    description: '获取当前登录用户详情' 
+  },
+  { 
+    id: 2, 
+    name: '更新库存', 
+    url: '/v1/stock/update', 
+    method: 'POST', 
+    paramType: 'JSON', 
+    tokenName: '测试环境 Token', 
+    expectedResult: '{"status": "updated"}',
+    actualResult: '{"status": "updated"}',
+    testStatus: 'success',
+    description: '批量更新库存水平' 
+  },
+  { 
+    id: 3, 
+    name: '处理支付', 
+    url: '/v1/checkout/pay', 
+    method: 'POST', 
+    paramType: 'JSON', 
+    tokenName: '开发环境 Token', 
+    expectedResult: '{"success": true}',
+    actualResult: '{"success": true}',
+    testStatus: 'pending',
+    description: '执行 Stripe 支付' 
+  },
+];
 
 export default function InterfacesPage() {
-  const [interfaces, setInterfaces] = React.useState<any[]>([]);
+  const [viewMode, setViewMode] = React.useState<'list' | 'params'>('list');
+  const [selectedInterface, setSelectedInterface] = React.useState<any>(null);
+  const [interfaces, setInterfaces] = React.useState<any[]>(mockInterfaces);
   const [isLoading, setIsLoading] = React.useState(true);
   
   // Project state
   const [projects, setProjects] = React.useState<any[]>([
     { id: '1', name: '电商平台项目' },
     { id: '2', name: '用户中心系统' }
+  ]);
+  
+  // Headers state
+  const [headers, setHeaders] = React.useState<any[]>([
+    { id: '1', name: 'JSON Content-Type' },
+    { id: '2', name: 'Form Data Content-Type' },
+    { id: '3', name: 'Authorization Bearer' },
+    { id: '4', name: 'Custom Headers' },
   ]);
   const [selectedProjectId, setSelectedProjectId] = React.useState<string>('1');
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
@@ -42,10 +92,12 @@ export default function InterfacesPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setInterfaces(data);
+        if (data && data.length > 0) {
+          setInterfaces(data);
+        }
       }
     } catch (error) {
-      toast.error('获取接口列表失败');
+      // toast.error('获取接口列表失败');
     } finally {
       setIsLoading(false);
     }
@@ -54,45 +106,6 @@ export default function InterfacesPage() {
   React.useEffect(() => {
     fetchInterfaces();
   }, []);
-
-  const mockInterfaces = [
-    { 
-      id: 1, 
-      name: '获取用户资料', 
-      url: '/v1/users/me', 
-      method: 'GET', 
-      paramType: 'Query', 
-      params: 'id=123', 
-      tokenName: '开发环境 Token', 
-      expectedResult: '{"code": 200, "data": {"name": "Admin"}}',
-      actualResult: '{"code": 200, "data": {"name": "Admin"}}',
-      description: '获取当前登录用户详情' 
-    },
-    { 
-      id: 2, 
-      name: '更新库存', 
-      url: '/v1/stock/update', 
-      method: 'POST', 
-      paramType: 'JSON', 
-      params: '{"sku": "ABC", "qty": 10}', 
-      tokenName: '测试环境 Token', 
-      expectedResult: '{"status": "updated"}',
-      actualResult: '{"status": "updated"}',
-      description: '批量更新库存水平' 
-    },
-    { 
-      id: 3, 
-      name: '处理支付', 
-      url: '/v1/checkout/pay', 
-      method: 'POST', 
-      paramType: 'JSON', 
-      params: '{"amount": 99.9, "currency": "USD"}', 
-      tokenName: '开发环境 Token', 
-      expectedResult: '{"success": true}',
-      actualResult: '{"success": true}',
-      description: '执行 Stripe 支付' 
-    },
-  ];
 
   const handleEdit = (item: any) => {
     setEditingInterface(item);
@@ -119,11 +132,10 @@ export default function InterfacesPage() {
   };
 
   const toggleSelectAll = () => {
-    const currentList = interfaces.length > 0 ? interfaces : mockInterfaces;
-    if (selectedIds.size === currentList.length) {
+    if (selectedIds.size === interfaces.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(currentList.map(i => i.id)));
+      setSelectedIds(new Set(interfaces.map(i => i.id)));
     }
   };
 
@@ -145,6 +157,20 @@ export default function InterfacesPage() {
     toast.info(`正在批量运行 ${selectedIds.size} 个接口...`);
   };
 
+  const openParams = (item: any) => {
+    setSelectedInterface(item);
+    setViewMode('params');
+  };
+
+  if (viewMode === 'params') {
+    return (
+      <InterfaceParamsPage 
+        interfaceName={selectedInterface?.name} 
+        onBack={() => setViewMode('list')} 
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -158,7 +184,7 @@ export default function InterfacesPage() {
             <Label className="text-sm font-medium whitespace-nowrap">项目</Label>
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
               <SelectTrigger className="w-[180px]">
-                {selectedProjectId || "选择项目"}
+                {projects.find(p => p.id === selectedProjectId)?.name || "选择项目"}
               </SelectTrigger>
               <SelectContent>
                 {projects.map(p => (
@@ -177,9 +203,11 @@ export default function InterfacesPage() {
             </Button>
           )}
           <Dialog>
-            <DialogTrigger render={<Button className="gap-2" />}>
-              <Plus className="w-4 h-4" />
-              新建接口
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                新建接口
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -252,13 +280,18 @@ export default function InterfacesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>参数内容</Label>
-                  <Input placeholder='例如：{"id": 123} 或 key=value' />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>预期结果</Label>
-                  <Input placeholder='例如：{"code": 200}' />
+                <div className="space-y-2">
+                  <Label>请求头</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择请求头" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {headers.map(h => (
+                        <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label>描述</Label>
@@ -364,20 +397,28 @@ export default function InterfacesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>参数内容</Label>
-                    <Input 
-                      value={copyingInterface.params} 
-                      onChange={(e) => setCopyingInterface({...copyingInterface, params: e.target.value})}
-                      placeholder='例如：{"id": 123} 或 key=value' 
-                    />
+                  <div className="space-y-2">
+                    <Label>请求头</Label>
+                    <Select
+                      value={copyingInterface.headerId || ''}
+                      onValueChange={(val) => setCopyingInterface({...copyingInterface, headerId: val})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择请求头" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {headers.map(h => (
+                          <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-2 space-y-2">
-                    <Label>预期结果</Label>
+
                     <Input 
-                      value={copyingInterface.expectedResult} 
-                      onChange={(e) => setCopyingInterface({...copyingInterface, expectedResult: e.target.value})}
-                      placeholder='例如：{"code": 200}' 
+ 
+
+ 
                     />
                   </div>
                   <div className="col-span-2 space-y-2">
@@ -469,13 +510,18 @@ export default function InterfacesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>参数内容</Label>
-                    <Input defaultValue={editingInterface.params} placeholder='例如：{"id": 123} 或 key=value' />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>预期结果</Label>
-                    <Input defaultValue={editingInterface.expectedResult} placeholder='例如：{"code": 200}' />
+                  <div className="space-y-2">
+                    <Label>请求头</Label>
+                    <Select defaultValue={editingInterface.headerId || ''}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择请求头" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {headers.map(h => (
+                          <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-2 space-y-2">
                     <Label>描述</Label>
@@ -509,15 +555,13 @@ export default function InterfacesPage() {
               <TableHead>端点</TableHead>
               <TableHead>Token 名称</TableHead>
               <TableHead>参数类型</TableHead>
-              <TableHead>参数</TableHead>
-              <TableHead>预期结果</TableHead>
-              <TableHead>实际结果</TableHead>
+              <TableHead>测试结果</TableHead>
               <TableHead>描述</TableHead>
               <TableHead className="w-[180px]">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(interfaces.length > 0 ? interfaces : mockInterfaces).map((item) => (
+            {interfaces.map((item) => (
               <TableRow key={item.id} className={selectedIds.has(item.id) ? 'bg-muted/50' : ''}>
                 <TableCell>
                   <Checkbox 
@@ -546,20 +590,25 @@ export default function InterfacesPage() {
                 <TableCell>
                   <Badge variant="outline" className="text-[10px]">{item.paramType || 'None'}</Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[150px]" title={item.params}>
-                  {item.params || '-'}
-                </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[120px]" title={item.expectedResult}>
-                  {item.expectedResult || '-'}
-                </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[120px]" title={item.actualResult}>
-                  <span className={item.actualResult === item.expectedResult ? 'text-green-500' : 'text-red-500'}>
-                    {item.actualResult || '-'}
-                  </span>
+                <TableCell>
+                  <Badge 
+                    variant={item.testStatus === 'success' ? 'secondary' : item.testStatus === 'failed' ? 'outline' : 'outline'}
+                    className={
+                      item.testStatus === 'success' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 
+                      item.testStatus === 'failed' ? 'bg-red-50 text-red-600 border-red-200' : 
+                      'bg-slate-100 text-slate-600 border-slate-200'
+                    }
+                  >
+                    {item.testStatus === 'success' ? '成功' : item.testStatus === 'failed' ? '失败' : '未开始'}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-sm">{item.description}</TableCell>
                 <TableCell>
                   <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="gap-1 h-8" onClick={() => openParams(item)}>
+                      <Settings2 className="w-3 h-3" />
+                      参数
+                    </Button>
                     <Button variant="outline" size="sm" className="gap-1 h-8" onClick={() => handleEdit(item)}>
                       <Edit2 className="w-3 h-3" />
                       编辑

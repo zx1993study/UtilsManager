@@ -11,7 +11,8 @@ import {
   Menu,
   X,
   Key,
-  Folder
+  Folder,
+  Layout as LayoutIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,11 +21,12 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { name: '控制面板', path: '/', icon: LayoutDashboard },
+  { name: '统计面板', path: '/', icon: LayoutDashboard },
   { name: '用户管理', path: '/users', icon: Users },
   { name: '项目管理', path: '/projects', icon: Folder },
   { name: '字典配置', path: '/dictionaries', icon: Book },
   { name: '接口管理', path: '/interfaces', icon: Globe },
+  { name: '页面管理', path: '/pages', icon: LayoutIcon },
   { name: '流程管理', path: '/flows', icon: GitBranch },
   { name: 'Token 管理', path: '/tokens', icon: Key },
   { name: '测试报告', path: '/reports', icon: FileText },
@@ -107,9 +109,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 border-b flex items-center justify-between px-8 bg-card">
+        <header className="h-16 border-b flex items-center justify-between px-8 bg-card flex-shrink-0">
           <h2 className="text-lg font-semibold capitalize">
-            {navItems.find(item => item.path === location.pathname)?.name || '控制面板'}
+            {navItems.find(item => item.path === location.pathname)?.name || '统计面板'}
           </h2>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">管理员</span>
@@ -118,11 +120,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <ScrollArea className="flex-1 p-8">
+        <div className="flex-1 overflow-y-auto p-8">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>
-        </ScrollArea>
+        </div>
       </main>
     </div>
   );

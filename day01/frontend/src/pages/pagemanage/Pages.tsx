@@ -1,5 +1,6 @@
 import React from 'react';
-import { Plus, Search, Layout as LayoutIcon, Play, Edit2, Copy, Trash2, CheckSquare, Square, Trash } from 'lucide-react';
+import { Plus, Search, Layout as LayoutIcon, Play, Edit2, Copy, Trash2, CheckSquare, Square, Trash, List } from 'lucide-react';
+import PageFlows from './PageFlows';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,7 +16,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
@@ -40,6 +40,8 @@ interface PageTest {
 }
 
 export default function PagesPage() {
+  const [viewMode, setViewMode] = React.useState<'list' | 'flows'>('list');
+  const [selectedPage, setSelectedPage] = React.useState<any>(null);
   const [pages, setPages] = React.useState<PageTest[]>([
     {
       id: '1',
@@ -225,7 +227,22 @@ export default function PagesPage() {
     toast.info(`正在批量运行 ${selectedIds.size} 个页面测试...`);
   };
 
+  const openFlows = (page: any) => {
+    setSelectedPage(page);
+    setViewMode('flows');
+  };
+
+  if (viewMode === 'flows') {
+    return (
+      <PageFlows
+        pageName={selectedPage?.name}
+        onBack={() => setViewMode('list')}
+      />
+    );
+  }
+
   return (
+    <>
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="relative w-full md:w-96">
@@ -241,9 +258,11 @@ export default function PagesPage() {
             </Button>
           )}
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => { setIsAddDialogOpen(open); if(open) resetForm(); }}>
-            <DialogTrigger render={<Button className="gap-2" />}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
               <Plus className="w-4 h-4" />
               添加页面
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -340,7 +359,9 @@ export default function PagesPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openFlows(page)}>
+                      <List className="w-4 h-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(page)}>
                       <Edit2 className="w-4 h-4" />
                     </Button>
@@ -453,5 +474,6 @@ export default function PagesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

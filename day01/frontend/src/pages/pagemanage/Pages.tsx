@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Plus, Search, Layout as LayoutIcon, Play, Edit2, Copy, Trash2, CheckSquare, Square, Trash, List } from 'lucide-react';
 import PageFlows from './PageFlows';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { pageApi } from '@/services/pageapi';
 
 interface TestStep {
   id: string;
@@ -122,34 +123,44 @@ export default function PagesPage() {
     }));
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!formData.name) {
       toast.error('请输入页面名称');
       return;
     }
-    const newPage: PageTest = {
-      id: Date.now().toString(),
-      name: formData.name || '',
-      url: formData.url || '',
-      function: formData.function || '',
-      steps: formData.steps || '',
-      structuredSteps: formData.structuredSteps || [],
-      expectedResult: formData.expectedResult || '',
-      actualResult: formData.actualResult || '',
-      testStatus: 'pending',
-      token: formData.token || ''
-    };
-    setPages([newPage, ...pages]);
-    setIsAddDialogOpen(false);
-    resetForm();
-    toast.success('页面测试用例已添加');
+    try {
+      const newPage = await pageApi.createPage({
+        page_name: formData.name,
+        url: formData.url,
+        function: formData.function,
+        token_id: formData.token
+      });
+      setPages([{ ...newPage, testStatus: 'pending' as const }, ...pages]);
+      setIsAddDialogOpen(false);
+      resetForm();
+      toast.success('页面测试用例已添加');
+    } catch (error) {
+      toast.error('添加页面失败');
+      console.error(error);
+    }
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!currentPage) return;
-    setPages(pages.map(p => p.id === currentPage.id ? { ...p, ...formData } as PageTest : p));
-    setIsEditDialogOpen(false);
-    toast.success('更新成功');
+    try {
+      const updatedPage = await pageApi.updatePage(parseInt(currentPage.id), {
+        page_name: formData.name,
+        url: formData.url,
+        function: formData.function,
+        token_id: formData.token
+      });
+      setPages(pages.map(p => p.id === currentPage.id ? { ...p, ...formData, ...updatedPage } as PageTest : p));
+      setIsEditDialogOpen(false);
+      toast.success('更新成功');
+    } catch (error) {
+      toast.error('更新页面失败');
+      console.error(error);
+    }
   };
 
   const handleCopy = (page: PageTest) => {
@@ -161,27 +172,28 @@ export default function PagesPage() {
     setIsCopyDialogOpen(true);
   };
 
-  const saveCopy = () => {
-    const newPage: PageTest = {
-      id: Date.now().toString(),
-      name: formData.name || '',
-      url: formData.url || '',
-      function: formData.function || '',
-      steps: formData.steps || '',
-      structuredSteps: formData.structuredSteps || [],
-      expectedResult: formData.expectedResult || '',
-      actualResult: formData.actualResult || '',
-      testStatus: 'pending',
-      token: formData.token || ''
-    };
-    setPages([newPage, ...pages]);
-    setIsCopyDialogOpen(false);
-    toast.success('副本已保存');
+  const saveCopy = async () => {
+    if (!currentPage) return;
+    try {
+      const newPage = await pageApi.copyPage(parseInt(currentPage.id), formData.name || `${currentPage.name} (副本)`);
+      setPages([{ ...newPage, testStatus: 'pending' as const }, ...pages]);
+      setIsCopyDialogOpen(false);
+      toast.success('副本已保存');
+    } catch (error) {
+      toast.error('复制页面失败');
+      console.error(error);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setPages(pages.filter(p => p.id !== id));
-    toast.success('已删除');
+  const handleDelete = async (id: string) => {
+    try {
+      await pageApi.deletePage(parseInt(id));
+      setPages(pages.filter(p => p.id !== id));
+      toast.success('已删除');
+    } catch (error) {
+      toast.error('删除页面失败');
+      console.error(error);
+    }
   };
 
   const resetForm = () => {
@@ -223,8 +235,15 @@ export default function PagesPage() {
     setSelectedIds(newSelected);
   };
 
-  const handleBatchRun = () => {
-    toast.info(`正在批量运行 ${selectedIds.size} 个页面测试...`);
+  const handleBatchRun = async () => {
+    try {
+      const pageIds = Array.from(selectedIds).map(id => parseInt(id));
+      await pageApi.batchRunPages(pageIds);
+      toast.info(`正在批量运行 ${selectedIds.size} 个页面测试...`);
+    } catch (error) {
+      toast.error('批量运行页面测试失败');
+      console.error(error);
+    }
   };
 
   const openFlows = (page: any) => {
@@ -236,6 +255,7 @@ export default function PagesPage() {
     return (
       <PageFlows
         pageName={selectedPage?.name}
+        pageId={selectedPage?.id}
         onBack={() => setViewMode('list')}
       />
     );

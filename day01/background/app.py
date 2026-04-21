@@ -50,8 +50,12 @@ def create_app(config_name='default'):
     from routes.flow_routes import flow_bp
     from routes.dictionary_routes import dictionary_bp
     from routes.report_routes import report_bp
-    from routes.param_instance_routes import param_instance_bp
+    from routes.api_instance_routes import api_instance_bp
     from routes.param_template_routes import param_template_bp
+    from routes.api_template_routes import api_template_bp
+    from routes.page_routes import page_bp
+    from routes.element_template_routes import element_template_bp
+    from routes.page_instance_routes import page_instance_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)
@@ -61,8 +65,12 @@ def create_app(config_name='default'):
     app.register_blueprint(flow_bp)
     app.register_blueprint(dictionary_bp)
     app.register_blueprint(report_bp)
-    app.register_blueprint(param_instance_bp)
+    app.register_blueprint(api_instance_bp)
     app.register_blueprint(param_template_bp)
+    app.register_blueprint(api_template_bp)
+    app.register_blueprint(page_bp)
+    app.register_blueprint(element_template_bp)
+    app.register_blueprint(page_instance_bp)
 
     # 健康检查端点
     @app.route('/health')

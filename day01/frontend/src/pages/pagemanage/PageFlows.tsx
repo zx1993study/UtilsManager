@@ -61,20 +61,48 @@ interface OperationStep {
   status: 'success' | 'failed' | 'pending';
 }
 
-export default function PageFlowsPage({ pageName = '用户登录页面', onBack }: { pageName?: string, onBack: () => void }) {
-  const [templates, setTemplates] = React.useState<ElementTemplate[]>([
-    { id: '1', name: 'username', locator: 'id=user-name', element: 'Input', type: '文本输入', remark: '用户名输入框' },
-    { id: '2', name: 'password', locator: 'id=password', element: 'Input', type: '密码输入', remark: '密码输入框' },
-    { id: '3', name: 'captcha', locator: 'class=captcha-input', element: 'Input', type: '文本输入', remark: '验证码输入框' },
-  ]);
-
-  const [steps, setSteps] = React.useState<OperationStep[]>([
-    { id: '1', name: '正常登录', instance: 'username=admin&password=123456', executions: 15, expected: '登录成功', actual: '登录成功', executor: 'admin', time: '2024-03-20 14:30', status: 'success' },
-    { id: '2', name: '用户名错误', instance: 'username=wrong&password=123456', executions: 8, expected: '用户名不存在', actual: '用户名不存在', executor: 'admin', time: '2024-03-20 12:15', status: 'success' },
-    { id: '3', name: '密码错误', instance: 'username=admin&password=wrong', executions: 5, expected: '密码错误', actual: '系统错误', executor: 'test_user', time: '2024-03-19 16:45', status: 'failed' },
-  ]);
+export default function PageFlowsPage({ pageName = '用户登录页面', pageId, onBack }: { pageName?: string, pageId?: string, onBack: () => void }) {
+  const [templates, setTemplates] = React.useState<ElementTemplate[]>([]);
+  const [steps, setSteps] = React.useState<OperationStep[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const [selectedStepIds, setSelectedStepIds] = React.useState<Set<string>>(new Set());
+
+  // 加载元素模板列表
+  const loadTemplates = async () => {
+    if (!pageId) return;
+    try {
+      setIsLoading(true);
+      const data = await elementTemplateApi.getElementTemplates({ pageId });
+      setTemplates(data);
+    } catch (error) {
+      toast.error('加载元素模板失败');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 加载操作步骤列表
+  const loadSteps = async () => {
+    if (!pageId) return;
+    try {
+      setIsLoading(true);
+      const data = await pageInstanceApi.getPageInstances({ pageId });
+      setSteps(data);
+    } catch (error) {
+      toast.error('加载操作步骤失败');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 初始化时加载数据
+  useEffect(() => {
+    loadTemplates();
+    loadSteps();
+  }, [pageId]);
 
   // 元素模板编辑状态
   const [editingTemplate, setEditingTemplate] = React.useState<ElementTemplate | null>(null);
@@ -103,9 +131,16 @@ export default function PageFlowsPage({ pageName = '用户登录页面', onBack 
     setSelectedStepIds(newSelected);
   };
 
-  const handleBatchRun = () => {
+  const handleBatchRun = async () => {
     if (selectedStepIds.size === 0) return toast.error('请选择操作步骤');
-    toast.success(`正在批量运行 ${selectedStepIds.size} 个步骤...`);
+    try {
+      const instanceIds = Array.from(selectedStepIds).map(id => parseInt(id));
+      await pageInstanceApi.batchRunPageInstances(instanceIds);
+      toast.success(`正在批量运行 ${selectedStepIds.size} 个步骤...`);
+    } catch (error) {
+      toast.error('批量运行操作步骤失败');
+      console.error(error);
+    }
   };
 
   // 打开元素模板编辑弹窗
@@ -115,11 +150,23 @@ export default function PageFlowsPage({ pageName = '用户登录页面', onBack 
   };
 
   // 保存元素模板编辑
-  const saveTemplateEdit = () => {
-    if (!editingTemplate) return;
-    setTemplates(templates.map(t => t.id === editingTemplate.id ? editingTemplate : t));
-    setIsTemplateEditOpen(false);
-    toast.success('元素模板已更新');
+  const saveTemplateEdit = async () => {
+    if (!editingTemplate || !pageId) return;
+    try {
+      await elementTemplateApi.updateElementTemplate(parseInt(editingTemplate.id), {
+        element_name: editingTemplate.name,
+        locator: editingTemplate.locator,
+        element: editingTemplate.element,
+        type: editingTemplate.type,
+        remark: editingTemplate.remark
+      });
+      setTemplates(templates.map(t => t.id === editingTemplate.id ? editingTemplate : t));
+      setIsTemplateEditOpen(false);
+      toast.success('元素模板已更新');
+    } catch (error) {
+      toast.error('更新元素模板失败');
+      console.error(error);
+    }
   };
 
   // 打开操作步骤编辑弹窗
@@ -129,11 +176,21 @@ export default function PageFlowsPage({ pageName = '用户登录页面', onBack 
   };
 
   // 保存操作步骤编辑
-  const saveStepEdit = () => {
-    if (!editingStep) return;
-    setSteps(steps.map(s => s.id === editingStep.id ? editingStep : s));
-    setIsStepEditOpen(false);
-    toast.success('操作步骤已更新');
+  const saveStepEdit = async () => {
+    if (!editingStep || !pageId) return;
+    try {
+      await pageInstanceApi.updatePageInstance(parseInt(editingStep.id), {
+        page_instance_name: editingStep.name,
+        action_json: editingStep.instance,
+        expect_result: editingStep.expected
+      });
+      setSteps(steps.map(s => s.id === editingStep.id ? editingStep : s));
+      setIsStepEditOpen(false);
+      toast.success('操作步骤已更新');
+    } catch (error) {
+      toast.error('更新操作步骤失败');
+      console.error(error);
+    }
   };
 
   // 打开操作步骤复制弹窗
@@ -143,40 +200,30 @@ export default function PageFlowsPage({ pageName = '用户登录页面', onBack 
   };
 
   // 保存操作步骤复制
-  const saveStepCopy = () => {
-    if (!copyingStep) return;
-    setSteps([...steps, copyingStep]);
-    setIsStepCopyOpen(false);
-    toast.success('操作步骤已复制');
+  const saveStepCopy = async () => {
+    if (!copyingStep || !pageId) return;
+    try {
+      const newStep = await pageInstanceApi.copyPageInstance(parseInt(copyingStep.id), copyingStep.name);
+      setSteps([...steps, { ...newStep, status: 'pending' as const }]);
+      setIsStepCopyOpen(false);
+      toast.success('操作步骤已复制');
+    } catch (error) {
+      toast.error('复制操作步骤失败');
+      console.error(error);
+    }
   };
 
   // 根据元素模板生成随机实例
-  const generateInstanceFromTemplate = () => {
-    const instance: Record<string, any> = {};
-    templates.forEach(template => {
-      switch (template.type) {
-        case 'String':
-          // 生成随机长度为1-7的字符串
-          const randomLength = Math.floor(Math.random() * 7) + 1;
-          instance[template.name] = generateRandomString(randomLength);
-          break;
-        case 'Number':
-          instance[template.name] = Math.floor(Math.random() * 1000);
-          break;
-        case 'Boolean':
-          instance[template.name] = Math.random() > 0.5;
-          break;
-        case 'Object':
-          instance[template.name] = { key: 'value' };
-          break;
-        case 'Array':
-          instance[template.name] = ['item1', 'item2'];
-          break;
-        default:
-          instance[template.name] = '';
-      }
-    });
-    return JSON.stringify(instance, null, 2);
+  const generateInstanceFromTemplate = async () => {
+    if (!pageId) return '';
+    try {
+      const instance = await elementTemplateApi.generateInstance(pageId);
+      return JSON.stringify(instance, null, 2);
+    } catch (error) {
+      toast.error('生成实例失败');
+      console.error(error);
+      return '';
+    }
   };
 
   // 生成随机字符串

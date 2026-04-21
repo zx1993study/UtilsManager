@@ -70,8 +70,8 @@ CREATE TABLE `api_template` (
   INDEX idx_api_id (`api_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='接口模板表';
 
--- 5. 参数实例表 (Parameter Instance)
-CREATE TABLE `param_instance` (
+-- 5. 接口实例表 (api Instance)
+CREATE TABLE `api_instance` (
   `instance_id` BIGINT NOT NULL COMMENT '接口实例id',
   `instance_name` VARCHAR(255) DEFAULT NULL COMMENT '接口实例名称',
   `description` TEXT COMMENT '描述',
@@ -86,7 +86,7 @@ CREATE TABLE `param_instance` (
   `update_time` DATETIME DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`instance_id`),
   INDEX idx_api_id (`api_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='参数实例表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='接口实例表';
 
 -- 6. 页面管理表 (Page Management)
 CREATE TABLE `page_info` (

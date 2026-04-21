@@ -1,0 +1,45 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>徕控 Live Control - 智能无线中控系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes orbit-rotate {
+            0% { transform: rotateZ(0deg) rotateX(65deg); }
+            100% { transform: rotateZ(360deg) rotateX(65deg); }
+        }
+        @keyframes blink {
+            0% { opacity: 0.1; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 5px rgba(255, 255, 255, 1); }
+            100% { opacity: 0.1; transform: scale(0.8); }
+        }
+        .orbit-rotate {
+            animation: orbit-rotate var(--duration, 20s) linear infinite;
+        }
+        .orbit-rotate-reverse {
+            animation: orbit-rotate var(--duration, 35s) linear infinite reverse;
+        }
+        .star-blink {
+            animation: blink var(--duration, 3s) ease-in-out infinite;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-[#050507] text-white">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

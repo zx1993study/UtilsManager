@@ -26,6 +26,7 @@ from .project import Project
 from .dictionary import Dictionary
 from .api import API
 from .api_template import ApiTemplate
+from .param_template import ParamTemplate
 from .param_instance import ParamInstance
 from .page import Page
 from .element_template import ElementTemplate

@@ -2,7 +2,7 @@
 项目配置管理
 """
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optiona
 
 
 class Settings(BaseSettings):
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # 数据库配置
-    DATABASE_URL: str = "mysql+pymysql://root:Cc123456789+++@14.103.196.31:13306/zx_test"
+    DATABASE_URL: str
     
     # JWT配置
     SECRET_KEY: str = "your-secret-key-here-change-in-production"

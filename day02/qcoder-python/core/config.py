@@ -3,7 +3,8 @@
 """
 from pydantic_settings import BaseSettings
 from typing import Optiona
-
+import os
+from dotenv import load_dotenv
 
 class Settings(BaseSettings):
     """应用配置"""
@@ -14,7 +15,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # 数据库配置
-    DATABASE_URL: str
+    DATABASE_URL: os.getenv("DATABASE_URL")
     
     # JWT配置
     SECRET_KEY: str = "your-secret-key-here-change-in-production"

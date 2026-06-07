@@ -54,3 +54,28 @@ export function updateTestResult(data) {
     data
   })
 }
+
+// 获取API的最新结果
+export function getLatestResultByApiId(apiId) {
+  return request({
+    url: `/api/v1/apiResult/latest/api/${apiId}`,
+    method: 'get'
+  })
+}
+
+// 获取实例的最新结果
+export function getLatestResultByInstanceId(instanceId) {
+  return request({
+    url: `/api/v1/apiResult/latest/instance/${instanceId}`,
+    method: 'get'
+  })
+}
+
+// 执行API（通过instanceId）
+export function executeApi(instanceId) {
+  return request({
+    url: '/api/v1/apiExecute/execute',
+    method: 'post',
+    data: { executionType: 3, targetId: instanceId }
+  })
+}

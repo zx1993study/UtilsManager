@@ -75,10 +75,9 @@ export function clearTokens() {
 // 刷新Token
 export function refreshToken(id) {
   return request({
-      url: '/api/v1/apiExecute/execute',
-      method: 'post',
-      data: { executionType: 1, targetId: id }
-    })
+    url: `/api/v1/tokenInfo/refresh/${id}`,
+    method: 'post'
+  })
 }
 
 // 批量刷新Token

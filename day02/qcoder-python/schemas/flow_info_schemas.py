@@ -18,6 +18,7 @@ class FlowInfoBase(BaseModel):
     
     flow_name: Optional[str] = Field(None, description="流程名称")
     description: Optional[str] = Field(None, description="描述")
+    flow_type: Optional[int] = Field(1, description="流程类型，1为API流程")
     project_id: Optional[int] = Field(None, description="项目id")
     expect_result: Optional[str] = Field(None, description="预期结果")
     actual_result: Optional[str] = Field(None, description="实际结果")
@@ -32,7 +33,21 @@ class FlowInfoCreate(FlowInfoBase):
 
 class FlowInfoUpdate(FlowInfoBase):
     """流程信息更新Schema"""
-    pass
+    flow_id: int = Field(..., description="主键")
+
+
+class FlowInfoList(BaseModel):
+    """流程信息查询Schema"""
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+    
+    page_num: int = Field(default=1, ge=1, description="页码")
+    page_size: int = Field(default=10, ge=1, le=1000, description="每页大小")
+    flow_name: Optional[str] = Field(None, description="流程名称（模糊搜索）")
+    project_id: Optional[int] = Field(None, description="项目ID")
+    flow_type: Optional[int] = Field(None, description="流程类型")
 
 
 class FlowInfoInfo(FlowInfoBase):
@@ -41,6 +56,8 @@ class FlowInfoInfo(FlowInfoBase):
     creator: Optional[str] = Field(None, description="创建人")
     create_time: Optional[datetime] = Field(None, description="创建时间")
     update_time: Optional[datetime] = Field(None, description="更新时间")
+    project_name: Optional[str] = Field(None, description="项目名称")
+    project_address: Optional[str] = Field(None, description="项目地址")
 
     @field_serializer('create_time', 'update_time')
     def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:

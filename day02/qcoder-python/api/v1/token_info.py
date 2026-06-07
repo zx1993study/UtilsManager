@@ -12,7 +12,8 @@ from service.token_info_service import (
     get_token_info_list_service,
     create_token_info_service,
     update_token_info_service,
-    delete_token_info_service
+    delete_token_info_service,
+    refresh_token_service
 )
 
 router = APIRouter()
@@ -61,3 +62,15 @@ async def delete_token_info(
 ):
     """删除Token信息"""
     return await delete_token_info_service(db, item_id)
+
+
+@router.post("/tokenInfo/refresh/{token_id}", response_model=dict)
+async def refresh_token(
+    token_id: int,
+    db: Session = Depends(get_db)
+):
+    """刷新Token
+    
+    根据Token关联的instance_id重新执行API，解析响应中的token并更新到Token表
+    """
+    return await refresh_token_service(db, token_id)

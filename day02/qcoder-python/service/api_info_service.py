@@ -62,9 +62,11 @@ async def create_api_info_service(db: Session, data: ApiInfoCreate):
     )
     
     if existing:
+        # 将ORM对象转换为Schema对象
+        schema_existing = ApiInfoInfo.model_validate(existing)
         return error_response(
             msg="添加失败，该接口已存在",
-            data=existing,
+            data=schema_existing,
             error=f'{{"errorCode": "DUPLICATE_API", "message": "项目ID为{data.project_id}的API中，已存在URL为\'{data.method_url}\'且方法类型为{data.method_type}的接口"}}'
         )
     

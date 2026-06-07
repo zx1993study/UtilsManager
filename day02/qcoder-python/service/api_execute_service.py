@@ -84,9 +84,12 @@ def _build_and_send_request(context: dict) -> dict:
             json=json_data,
             timeout=30
         )
+        response.encoding = 'utf-8'
+        logger.info(f"{instance.instance_name} - {api_info.api_name} - {method} - {url} - {response.status_code} - {response.text[:1000]}")
         result_data.update({
             "success": True,
             "status_code": response.status_code,
+            "code": str(response.status_code),
             "response_info": response.text[:10000],
             "execution_time": round(time.time() - start_time, 3)
         })

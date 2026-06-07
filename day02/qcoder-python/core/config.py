@@ -2,7 +2,6 @@
 项目配置管理
 """
 from pydantic_settings import BaseSettings
-from typing import Optiona
 import os
 from dotenv import load_dotenv
 
@@ -15,7 +14,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # 数据库配置
-    DATABASE_URL: os.getenv("DATABASE_URL")
+    DATABASE_URL: str= os.getenv("DATABASE_URL")
     
     # JWT配置
     SECRET_KEY: str = "your-secret-key-here-change-in-production"

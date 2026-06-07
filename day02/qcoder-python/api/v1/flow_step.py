@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.flow_step_schemas import FlowStepCreate, FlowStepUpdate, FlowStepInfo
+from schemas.flow_step_schemas import FlowStepCreate, FlowStepUpdate, FlowStepList, FlowStepInfo
 from service.flow_step_service import (
     get_flow_step_service,
     get_flow_step_list_service,
+    get_flow_steps_by_flow_id_service,
     create_flow_step_service,
     update_flow_step_service,
     delete_flow_step_service
@@ -20,12 +21,11 @@ router = APIRouter(prefix="/flowStep", tags=["流程步骤"])
 
 @router.get("/", response_model=dict)
 async def list_flow_step(
-    page_num: int = Query(default=1, ge=1, description="页码"),
-    page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
+    filter_params: FlowStepList = Depends(),
     db: Session = Depends(get_db)
 ):
     """获取流程步骤分页列表"""
-    return await get_flow_step_list_service(db, page_num, page_size)
+    return await get_flow_step_list_service(db, filter_params)
 
 
 @router.get("/{item_id}", response_model=dict)
@@ -37,6 +37,15 @@ async def get_flow_step(
     return await get_flow_step_service(db, item_id)
 
 
+@router.get("/flow/{flow_id}", response_model=dict)
+async def get_flow_steps_by_flow_id(
+    flow_id: int,
+    db: Session = Depends(get_db)
+):
+    """根据流程ID获取所有步骤"""
+    return await get_flow_steps_by_flow_id_service(db, flow_id)
+
+
 @router.post("/", response_model=dict)
 async def create_flow_step(
     data: FlowStepCreate,
@@ -46,14 +55,13 @@ async def create_flow_step(
     return await create_flow_step_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/", response_model=dict)
 async def update_flow_step(
-    item_id: int,
     data: FlowStepUpdate,
     db: Session = Depends(get_db)
 ):
     """更新流程步骤"""
-    return await update_flow_step_service(db, item_id, data)
+    return await update_flow_step_service(db, data)
 
 
 @router.delete("/{item_id}", response_model=dict)

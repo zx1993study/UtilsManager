@@ -13,91 +13,134 @@
       </div>
     </el-card>
 
-    <!-- 中间信息区域 -->
-    <el-card shadow="never" class="info-card">
-      <el-descriptions :column="3" border>
-        <el-descriptions-item label="参数模板名称">
-          {{ apiInfo.templateName || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="参数类型">
-          {{ getParamTypeText(apiInfo.paramType) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="请求头">
-          {{ apiInfo.headers || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="项目名称">
-          {{ apiInfo.projectName || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="项目地址">
-          {{ apiInfo.projectAddress || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="Token名称">
-          {{ apiInfo.tokenName || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="成功实例总数">
-          <el-tag type="success">{{ statistics.successCount || 0 }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="失败实例总数">
-          <el-tag type="danger">{{ statistics.failCount || 0 }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="备注">
-          {{ apiInfo.remark || '-' }}
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
-
     <!-- 下方左右布局区域 -->
     <div class="content-layout">
-      <!-- 左侧：参数模板列表 -->
-      <el-card shadow="never" class="template-card">
-        <div class="card-header">
-          <h3>参数模板</h3>
-          <el-button type="primary" size="small" @click="handleAddTemplate">
-            <el-icon><Plus /></el-icon>
-            <span>新增</span>
-          </el-button>
-        </div>
-        
-        <el-table
-          :data="templateList"
-          border
-          stripe
-          style="width: 100%"
-          max-height="500"
-        >
-          <el-table-column prop="fieldName" label="字段名称" min-width="120" show-overflow-tooltip />
-          <el-table-column prop="fieldType" label="字段类型" width="100">
-            <template #default="{ row }">
-              {{ getFieldTypeText(row.fieldType) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="fieldSize" label="字段大小" width="100" />
-          <el-table-column prop="isRequired" label="是否必填" width="100">
-            <template #default="{ row }">
-              {{ row.isRequired === 'Y' ? '是' : '否' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
-            <template #default="{ row }">
-              <el-button
-                type="primary"
-                size="small"
-                link
-                @click="handleEditTemplate(row)"
+      <!-- 左侧：选项卡（参数模板 + 结果详情） -->
+      <el-card shadow="never" class="left-panel">
+        <el-tabs v-model="activeTab" class="left-tabs">
+          <!-- 结果详情选项卡 -->
+          <el-tab-pane label="结果详情" name="result">
+            <div class="result-detail-container">
+              <!-- 上方筛选区域 -->
+              <div class="filter-section">
+                <el-form :inline="true" class="filter-form">
+                  <el-form-item label="API">
+                    <el-select
+                      v-model="selectedApiId"
+                      placeholder="请选择API"
+                      style="width: 100%"
+                      @change="handleApiChange"
+                    >
+                      <el-option
+                        v-for="api in apiList"
+                        :key="api.apiId"
+                        :label="api.apiName"
+                        :value="api.apiId"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="API实例">
+                    <el-select
+                      v-model="selectedInstanceId"
+                      placeholder="请选择API实例"
+                      style="width: 100%"
+                      :disabled="!selectedApiId"
+                    >
+                      <el-option
+                        v-for="instance in instanceList"
+                        :key="instance.instanceId"
+                        :label="instance.instanceName"
+                        :value="instance.instanceId"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" @click="handleSearchResult" :disabled="!selectedInstanceId" style="width: 100%">
+                      <el-icon><Search /></el-icon>
+                      <span>搜索</span>
+                    </el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+
+              <!-- 下方结果展示区域 -->
+              <div v-if="currentResult" class="result-content">
+                <el-descriptions :column="1" border>
+                  <el-descriptions-item label="URL">
+                    {{ currentResult.projectAddress }}{{ currentResult.apiUrl }}
+                  </el-descriptions-item>
+                  <el-descriptions-item label="Token">
+                    {{ currentResult.tokenName || '-' }}
+                  </el-descriptions-item>
+                  <el-descriptions-item label="请求头">
+                    <pre class="json-content">{{ formatJson(currentResult.requestHeader) }}</pre>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="Code">
+                    <el-tag :type="getCodeType(currentResult.code)">{{ currentResult.code }}</el-tag>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="返回结果">
+                    <pre class="json-content">{{ formatJson(currentResult.responseInfo) }}</pre>
+                  </el-descriptions-item>
+                </el-descriptions>
+              </div>
+              <el-empty v-else description="暂无结果数据" />
+            </div>
+          </el-tab-pane>
+
+          <!-- 参数模板选项卡 -->
+          <el-tab-pane label="参数模板" name="template">
+            <div class="template-container">
+              <div class="template-header">
+                <h3>参数模板列表</h3>
+                <el-button type="primary" size="small" @click="handleAddTemplate">
+                  <el-icon><Plus /></el-icon>
+                  <span>新增</span>
+                </el-button>
+              </div>
+              
+              <el-table
+                :data="templateList"
+                border
+                stripe
+                style="width: 100%"
+                max-height="500"
               >
-                编辑
-              </el-button>
-              <el-button
-                type="danger"
-                size="small"
-                link
-                @click="handleDeleteTemplate(row)"
-              >
-                删除
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+                <el-table-column prop="fieldName" label="字段名称" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="fieldType" label="字段类型" width="100">
+                  <template #default="{ row }">
+                    {{ getFieldTypeText(row.fieldType) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="fieldSize" label="字段大小" width="100" />
+                <el-table-column prop="isRequired" label="是否必填" width="100">
+                  <template #default="{ row }">
+                    {{ row.isRequired === 'Y' ? '是' : '否' }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="120" fixed="right">
+                  <template #default="{ row }">
+                    <el-button
+                      type="primary"
+                      size="small"
+                      link
+                      @click="handleEditTemplate(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      type="danger"
+                      size="small"
+                      link
+                      @click="handleDeleteTemplate(row)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </el-card>
 
       <!-- 右侧：测试用例列表 -->
@@ -162,6 +205,15 @@
               <span>运行</span>
             </el-button>
             <el-button
+              type="primary"
+              size="small"
+              link
+              @click="handleCopyTestcase(row)"
+            >
+              <el-icon><DocumentCopy /></el-icon>
+              <span>复制</span>
+            </el-button>
+            <el-button
               type="danger"
               size="small"
               link
@@ -204,6 +256,42 @@
       <el-form-item label="用例输入" prop="instanceJson">
         <el-input 
           v-model="formData.instanceJson" 
+          type="textarea" 
+          :rows="5"
+          placeholder="请输入用例参数(JSON格式)" 
+        />
+      </el-form-item>
+    </common-dialog>
+
+    <!-- 复制用例弹窗 -->
+    <common-dialog
+      v-model="copyDialogVisible"
+      title="复制测试用例"
+      :form-data="copyFormData"
+      :rules="formRules"
+      :loading="copySubmitLoading"
+      width="700px"
+      @confirm="handleCopySubmit"
+    >
+      <el-form-item label="用例名称" prop="instanceName">
+        <el-input v-model="copyFormData.instanceName" placeholder="请输入用例名称" />
+      </el-form-item>
+
+      <el-form-item label="描述" prop="description">
+        <el-input v-model="copyFormData.description" type="textarea" placeholder="请输入描述" />
+      </el-form-item>
+
+      <el-form-item label="期望结果" prop="expectResult">
+        <el-input v-model="copyFormData.expectResult" placeholder="请输入期望结果" />
+      </el-form-item>
+
+      <el-form-item label="备注" prop="remark">
+        <el-input v-model="copyFormData.remark" type="textarea" placeholder="请输入备注" />
+      </el-form-item>
+
+      <el-form-item label="用例输入" prop="instanceJson">
+        <el-input 
+          v-model="copyFormData.instanceJson" 
           type="textarea" 
           :rows="5"
           placeholder="请输入用例参数(JSON格式)" 
@@ -259,21 +347,40 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Plus, Delete } from '@element-plus/icons-vue'
+import { VideoPlay, Plus, Delete, Search, DocumentCopy } from '@element-plus/icons-vue'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as apiApi from '@/api/api/api'
 import * as apiTemplateApi from '@/api/api/api-template'
+import * as apiResultApi from '@/api/api/api-result'
 
 const route = useRoute()
 const router = useRouter()
 const tableRef = ref(null)
 const submitLoading = ref(false)
 const selectedRows = ref([])
+
+// 选项卡激活状态
+const activeTab = ref('result')
+
+// API列表
+const apiList = ref([])
+
+// 实例列表
+const instanceList = ref([])
+
+// 选中的API ID
+const selectedApiId = ref(null)
+
+// 选中的实例ID
+const selectedInstanceId = ref(null)
+
+// 当前结果
+const currentResult = ref(null)
 
 // 参数模板列表
 const templateList = ref([])
@@ -363,6 +470,22 @@ const formRules = {
   instanceName: [{ required: true, message: '请输入用例名称', trigger: 'blur' }],
   instanceJson: [{ required: true, message: '请输入用例参数', trigger: 'blur' }]
 }
+
+// 复制弹窗控制
+const copyDialogVisible = ref(false)
+const copySubmitLoading = ref(false)
+
+// 复制表单数据
+const copyFormData = reactive({
+  instanceId: null,
+  projectId: '',
+  apiId: '',
+  instanceName: '',
+  description: '',
+  expectResult: '',
+  remark: '',
+  instanceJson: ''
+})
 
 // 获取方法类型文本
 const getMethodTypeText = (type) => {
@@ -454,6 +577,18 @@ const loadApiDetail = async () => {
   try {
     const res = await apiApi.getApiDetail(apiInfo.apiId)
     Object.assign(apiInfo, res.data)
+    
+    // 设置默认选中的API为当前API
+    selectedApiId.value = apiInfo.apiId
+    
+    // 加载API列表（用于下拉框）
+    await loadApiList()
+    
+    // 加载当前API的实例列表
+    await loadInstanceList(selectedApiId.value)
+    
+    // 获取当前API的最新结果
+    await loadLatestResultByApiId(selectedApiId.value)
     
     // 加载统计信息（这里可以根据实际API调整）
     loadStatistics()
@@ -563,6 +698,16 @@ const handleRunTestcase = (row) => {
       ElMessage.success('运行成功')
       tableRef.value.refresh()
       loadStatistics()
+      
+      // 如果当前选中的实例ID与运行的实例ID相同，刷新结果详情
+      if (selectedInstanceId.value === row.instanceId) {
+        await loadLatestResultByInstanceId(row.instanceId)
+      }
+      
+      // 如果在结果详情选项卡，且当前API与运行的用例所属API相同，刷新最新结果
+      if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
+        await loadLatestResultByApiId(selectedApiId.value)
+      }
     } catch (error) {
       console.error('运行失败:', error)
       ElMessage.error('运行失败')
@@ -594,11 +739,57 @@ const handleBatchRun = () => {
       loadStatistics()
       // 清空选择
       tableRef.value.clearSelection()
+      
+      // 刷新当前API的最新结果
+      if (selectedApiId.value) {
+        await loadLatestResultByApiId(selectedApiId.value)
+      }
     } catch (error) {
       console.error('批量运行失败:', error)
       ElMessage.error('批量运行失败')
     }
   }).catch(() => {})
+}
+
+// 复制测试用例
+const handleCopyTestcase = (row) => {
+  // 填充复制表单数据
+  Object.assign(copyFormData, {
+    instanceId: null, // 清空ID，因为是新增
+    projectId: row.projectId || apiInfo.projectId,
+    apiId: row.apiId || apiInfo.apiId,
+    instanceName: row.instanceName + ' - 副本', // 默认名称加副本后缀
+    description: row.description || '',
+    expectResult: row.expectResult || '',
+    remark: row.remark || '',
+    instanceJson: row.instanceJson || ''
+  })
+  copyDialogVisible.value = true
+}
+
+// 提交复制表单
+const handleCopySubmit = async () => {
+  try {
+    copySubmitLoading.value = true
+    await apiTestcaseApi.addTestcase(copyFormData)
+    ElMessage.success('复制成功')
+    copyDialogVisible.value = false
+    tableRef.value.refresh()
+    loadStatistics()
+    
+    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+    await nextTick()
+    setTimeout(async () => {
+      if (selectedApiId.value) {
+        await loadInstanceList(selectedApiId.value, true)
+      }
+    }, 300)
+  } catch (error) {
+    console.error('复制失败:', error)
+    ElMessage.error('复制失败')
+  } finally {
+    copySubmitLoading.value = false
+  }
 }
 
 // 提交表单（编辑）
@@ -615,6 +806,14 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     tableRef.value.refresh()
     loadStatistics()
+    
+    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+    await nextTick()
+    setTimeout(async () => {
+      if (selectedApiId.value) {
+        await loadInstanceList(selectedApiId.value, true)
+      }
+    }, 300)
   } catch (error) {
     console.error('提交失败:', error)
     ElMessage.error('提交失败')
@@ -640,6 +839,14 @@ const handleDeleteTestcase = async (row) => {
     ElMessage.success('删除成功')
     tableRef.value.refresh()
     loadStatistics()
+    
+    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+    await nextTick()
+    setTimeout(async () => {
+      if (selectedApiId.value) {
+        await loadInstanceList(selectedApiId.value, true)
+      }
+    }, 300)
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
@@ -677,6 +884,14 @@ const handleBatchDeleteTestcase = async () => {
     loadStatistics()
     // 清空选择
     tableRef.value.clearSelection()
+    
+    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+    await nextTick()
+    setTimeout(async () => {
+      if (selectedApiId.value) {
+        await loadInstanceList(selectedApiId.value, true)
+      }
+    }, 300)
   } catch (error) {
     if (error !== 'cancel') {
       console.error('批量删除失败:', error)
@@ -767,7 +982,7 @@ onMounted(() => {
   // 从路由参数获取API ID
   apiInfo.apiId = route.params.apiId
   
-  // 从query参数获取基本信息
+  // 从 query参数获取基本信息
   if (route.query.apiName) {
     apiInfo.apiName = route.query.apiName
   }
@@ -792,6 +1007,118 @@ onMounted(() => {
     ElMessage.error('缺少API ID参数')
   }
 })
+
+// ==================== 结果详情相关方法 ====================
+
+// 加载API列表
+const loadApiList = async () => {
+  try {
+    const res = await apiApi.getApiList({ pageNum: 1, pageSize: 100 })
+    apiList.value = res.data.items || []
+  } catch (error) {
+    console.error('加载API列表失败:', error)
+  }
+}
+
+// 加载实例列表
+const loadInstanceList = async (apiId, keepSelectedId = false) => {
+  try {
+    const res = await apiTestcaseApi.getTestcaseList({ apiId, pageNum: 1, pageSize: 100 })
+    instanceList.value = res.data.items || []
+    
+    // 如果不是保持选中ID，且有实例，选择第一个作为默认值
+    if (!keepSelectedId && instanceList.value.length > 0) {
+      selectedInstanceId.value = instanceList.value[0].instanceId
+    }
+  } catch (error) {
+    console.error('加载实例列表失败:', error)
+  }
+}
+
+// 根据API ID加载最新结果
+const loadLatestResultByApiId = async (apiId) => {
+  try {
+    const res = await apiResultApi.getLatestResultByApiId(apiId)
+    console.log('获取API最新结果响应:', res)
+    if (res.success && res.data) {
+      currentResult.value = res.data
+      console.log('设置currentResult:', currentResult.value)
+      // 同步更新选中的实例ID
+      selectedInstanceId.value = res.data.instanceId
+    } else {
+      console.warn('未获取到结果数据, success:', res.success, 'data:', res.data)
+      currentResult.value = null
+    }
+  } catch (error) {
+    console.error('加载最新结果失败:', error)
+    currentResult.value = null
+  }
+}
+
+// 根据实例ID加载最新结果
+const loadLatestResultByInstanceId = async (instanceId) => {
+  try {
+    const res = await apiResultApi.getLatestResultByInstanceId(instanceId)
+    console.log('获取实例最新结果响应:', res)
+    if (res.success && res.data) {
+      currentResult.value = res.data
+      console.log('设置currentResult:', currentResult.value)
+    } else {
+      console.warn('未获取到结果数据, success:', res.success, 'data:', res.data)
+      currentResult.value = null
+    }
+  } catch (error) {
+    console.error('加载实例最新结果失败:', error)
+    currentResult.value = null
+  }
+}
+
+// API改变事件
+const handleApiChange = async (apiId) => {
+  // 清空当前结果
+  currentResult.value = null
+  selectedInstanceId.value = null
+  
+  // 重新加载实例列表
+  await loadInstanceList(apiId)
+  
+  // 如果有实例，自动选择第一个并加载结果
+  if (instanceList.value.length > 0) {
+    selectedInstanceId.value = instanceList.value[0].instanceId
+    await loadLatestResultByInstanceId(selectedInstanceId.value)
+  }
+}
+
+// 搜索结果
+const handleSearchResult = async () => {
+  if (!selectedInstanceId.value) {
+    ElMessage.warning('请选择API实例')
+    return
+  }
+  
+  await loadLatestResultByInstanceId(selectedInstanceId.value)
+}
+
+// 格式化JSON
+const formatJson = (jsonStr) => {
+  if (!jsonStr) return '-'
+  try {
+    const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr
+    return JSON.stringify(obj, null, 2)
+  } catch (e) {
+    return jsonStr
+  }
+}
+
+// 获取Code类型
+const getCodeType = (code) => {
+  if (!code) return 'info'
+  const codeNum = parseInt(code)
+  if (codeNum >= 200 && codeNum < 300) return 'success'
+  if (codeNum >= 400 && codeNum < 500) return 'warning'
+  if (codeNum >= 500) return 'danger'
+  return 'info'
+}
 </script>
 
 <style scoped>
@@ -836,12 +1163,106 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   margin-top: 10px;
-  height: calc(100% - 250px);
+  height: calc(100% - 150px);
 }
 
-.template-card {
-  flex: 0 0 400px;
+.left-panel {
+  flex: 0 0 500px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.left-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.left-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.left-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
+.left-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  overflow: auto;
+}
+
+.result-detail-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.filter-section {
+  padding: 10px 0;
+  border-bottom: 1px solid #ebeef5;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.result-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.result-content :deep(.el-descriptions) {
+  margin-bottom: 0;
+}
+
+.json-content {
+  margin: 0;
+  padding: 8px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.template-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.template-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-shrink: 0;
+}
+
+.template-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #303133;
+  font-weight: bold;
 }
 
 .testcase-card {

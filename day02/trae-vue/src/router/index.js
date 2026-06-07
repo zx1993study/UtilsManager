@@ -118,6 +118,18 @@ const routes = [
         meta: { title: '结果管理', icon: 'DataAnalysis' }
       },
       {
+        path: '/api/flow',
+        name: 'ApiFlow',
+        component: () => import('@/views/api/flow/index.vue'),
+        meta: { title: 'API流程', icon: 'Share' }
+      },
+      {
+        path: '/api/flow-detail/:flowId',
+        name: 'ApiFlowDetail',
+        component: () => import('@/views/api/flow-detail/index.vue'),
+        meta: { title: '流程详情', hidden: true }
+      },
+      {
         path: '/api/testcase-detail/:apiId',
         name: 'ApiTestcaseDetail',
         component: () => import('@/views/api/testcase-detail/index.vue'),

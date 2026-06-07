@@ -6,8 +6,11 @@
       :api-method="apiResultApi.getTestResultList"
       :pagination="pagination"
       :search-fields="searchFields"
+      :show-selection="true"
+      row-key="resultId"
       @delete="handleDelete"
       @batch-delete="handleBatchDelete"
+      @selection-change="handleSelectionChange"
       :show-add="false"
       :show-edit="false"
     >
@@ -183,6 +186,14 @@ const pagination = reactive({
   pageSize: 10,
   total: 0
 })
+
+// 选中行
+const selectedRows = ref([])
+
+// 处理选择变化
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
 
 // 获取结果状态类型
 const getResultStatusType = (status) => {

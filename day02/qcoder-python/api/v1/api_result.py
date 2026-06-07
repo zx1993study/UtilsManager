@@ -6,13 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.api_result_schemas import ApiResultCreate, ApiResultUpdate, ApiResultInfo
+from schemas.api_result_schemas import ApiResultCreate, ApiResultUpdate, ApiResultInfo, ApiResultList
 from service.api_result_service import (
     get_api_result_service,
     get_api_result_list_service,
     create_api_result_service,
     update_api_result_service,
-    delete_api_result_service
+    delete_api_result_service,
+    get_latest_result_by_api_id_service,
+    get_latest_result_by_instance_id_service
 )
 
 router = APIRouter()
@@ -22,10 +24,11 @@ router = APIRouter()
 async def list_api_result(
     pageNum: int = Query(default=1, ge=1, description="页码"),
     pageSize: int = Query(default=10, ge=1, le=100, description="每页大小"),
+    AppiResultList: ApiResultList = Depends(),
     db: Session = Depends(get_db)
 ):
     """获取API结果分页列表"""
-    return await get_api_result_list_service(db, page_num=pageNum, page_size=pageSize)
+    return await get_api_result_list_service(db, page_num=pageNum, page_size=pageSize,ApiResultList=AppiResultList)
 
 
 @router.get("/apiResult/{item_id}", response_model=dict)
@@ -62,3 +65,19 @@ async def delete_api_result(
 ):
     """删除API结果"""
     return await delete_api_result_service(db, item_id)
+
+@router.get("/apiResult/latest/api/{api_id}", response_model=dict)
+async def get_latest_result_by_api_id(
+    api_id: int,
+    db: Session = Depends(get_db)
+):
+    """根据API ID获取最新结果"""
+    return await get_latest_result_by_api_id_service(db, api_id)
+
+@router.get("/apiResult/latest/instance/{instance_id}", response_model=dict)
+async def get_latest_result_by_instance_id(
+    instance_id: int,
+    db: Session = Depends(get_db)
+):
+    """根据实例ID获取最新结果"""
+    return await get_latest_result_by_instance_id_service(db, instance_id)

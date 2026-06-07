@@ -6,6 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from pydantic.alias_generators import to_camel
 from typing import Optional
 from datetime import datetime
+from models.api_info_model import ApiInfo
+from models.project_info_model import ProjectInfo
+from models.api_result_model import ApiResult
+from models.api_instance_model import ApiInstance
 
 
 class ApiResultBase(BaseModel):
@@ -31,14 +35,63 @@ class ApiResultCreate(ApiResultBase):
 class ApiResultUpdate(ApiResultBase):
     """API结果更新Schema"""
     result_id: int = Field(..., description="接口结果id")
+    
+class ApiResultList(ApiResultBase):
+    """条件查询条件Schema"""
+    api_id: Optional[int] = Field(None, description="接口id")
+    api_url: Optional[str] = Field(None, description="接口URL")
+    api_name: Optional[str] = Field(None, description="接口名称")
+    project_name: Optional[str] = Field(None, description="项目名称")
+    project_id: Optional[int] = Field(None, description="项目id")
+    instance_name: Optional[str] = Field(None, description="接口实例名称")
+    
+    def filter_params(self) -> list:
+        """获取过滤参数"""
+        params = []
+        if self.api_id is not None:
+            params.append(ApiInfo.api_id == self.api_id)
+        if self.api_url is not None:
+            params.append(ApiInfo.api_url.like(f'%{self.api_url}%'))
+        if self.api_name is not None: 
+            params.append(ApiInfo.api_name.like(f'%{self.api_name}%'))
+        if self.project_name is not None:
+            params.append(ProjectInfo.project_name.like(f'%{self.project_name}%'))
+        if self.project_id is not None:
+            params.append(ProjectInfo.project_id == self.project_id)
+        if self.instance_name is not None:
+            params.append(ApiInfo.instance_name.like(f'%{self.instance_name}%'))
+        if self.project_name is not None:
+            params.append(ProjectInfo.project_name.like(f'%{self.project_name}%'))
+        if self.code is not None:
+            params.append(ApiResult.code.like(f'%{self.code}%'))
+        if self.remark is not None:
+            params.append(ApiResult.remark.like(f'%{self.remark}%'))
+        if self.instance_name is not None:
+            params.append(ApiInstance.instance_name.like(f'%{self.instance_name}%'))
+        if self.result_status is not None:
+            params.append(ApiResult.result_status == self.result_status)
+        if self.instance_id is not None:
+            params.append(ApiResult.instance_id == self.instance_id)
+        return params
+
 
 
 class ApiResultInfo(ApiResultBase):
     """API结果响应Schema"""
     result_id: Optional[int] = Field(None, description="接口结果id")
     creator: Optional[str] = Field(None, description="创建人")
+    instance_name: Optional[str] = Field(None, description="接口实例名称")
+    api_name: Optional[str] = Field(None, description="接口名称")
+    api_id: Optional[int] = Field(None, description="接口id")
+    api_url: Optional[str] = Field(None, description="接口URL")
+    project_name: Optional[str] = Field(None, description="项目名称")
+    project_id: Optional[int] = Field(None, description="项目id")
     create_time: Optional[datetime] = Field(None, description="创建时间")
     update_time: Optional[datetime] = Field(None, description="更新时间")
+    method_type: Optional[int] = Field(None, description="请求方式")
+    project_address: Optional[str] = Field(None, description="项目地址")
+    token_name: Optional[str] = Field(None, description="Token名称")
+    request_header: Optional[str] = Field(None, description="请求头")
 
     @field_serializer('create_time', 'update_time')
     def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:

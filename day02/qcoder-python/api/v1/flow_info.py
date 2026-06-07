@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.flow_info_schemas import FlowInfoCreate, FlowInfoUpdate, FlowInfoInfo
+from schemas.flow_info_schemas import FlowInfoCreate, FlowInfoUpdate, FlowInfoList, FlowInfoInfo
 from service.flow_info_service import (
     get_flow_info_service,
     get_flow_info_list_service,
@@ -20,12 +20,11 @@ router = APIRouter(prefix="/flowInfo", tags=["流程信息"])
 
 @router.get("/", response_model=dict)
 async def list_flow_info(
-    page_num: int = Query(default=1, ge=1, description="页码"),
-    page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
+    filter_params: FlowInfoList = Depends(),
     db: Session = Depends(get_db)
 ):
     """获取流程信息分页列表"""
-    return await get_flow_info_list_service(db, page_num, page_size)
+    return await get_flow_info_list_service(db, filter_params)
 
 
 @router.get("/{item_id}", response_model=dict)
@@ -46,14 +45,13 @@ async def create_flow_info(
     return await create_flow_info_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/", response_model=dict)
 async def update_flow_info(
-    item_id: int,
     data: FlowInfoUpdate,
     db: Session = Depends(get_db)
 ):
     """更新流程信息"""
-    return await update_flow_info_service(db, item_id, data)
+    return await update_flow_info_service(db, data)
 
 
 @router.delete("/{item_id}", response_model=dict)

@@ -12,8 +12,11 @@ from mysql.token_info_sql import (
     update_token_info,
     delete_token_info
 )
+from mysql.api_result_sql import get_latest_result_by_instance_id
+from service.api_execute_service import execute_api_service
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
+import json
 
 
 async def get_token_info_service(db: Session, item_id: int):
@@ -109,3 +112,103 @@ async def delete_token_info_service(db: Session, item_id: int):
         msg="删除成功",
         data={"id": item_id, "message": "Token信息已删除"}
     )
+
+
+async def refresh_token_service(db: Session, token_id: int):
+    """刷新Token
+    
+    Args:
+        db: 数据库会话
+        token_id: Token ID
+        
+    Returns:
+        刷新结果
+    """
+    # 1. 获取Token信息
+    token_info = await get_token_info_by_id(db, token_id)
+    if not token_info:
+        return error_response(
+            msg="刷新失败，Token不存在",
+            data=None,
+            error='{"errorCode": "NOT_FOUND", "message": "Token不存在"}'
+        )
+    
+    # 2. 检查instance_id是否存在
+    instance_id = token_info.instance_id
+    if not instance_id:
+        return error_response(
+            msg="刷新失败，Token未关联实例",
+            data=None,
+            error='{"errorCode": "INVALID_INSTANCE", "message": "Token未关联实例ID"}'
+        )
+    
+    try:
+        # 3. 调用API执行服务，重新执行该实例
+        execute_result = await execute_api_service(db, target_id=instance_id, execution_type=1)
+        
+        # 4. 获取最新的执行结果
+        latest_result = await get_latest_result_by_instance_id(db, instance_id)
+        if not latest_result or not latest_result.response_info:
+            return error_response(
+                msg="刷新失败，未获取到执行结果",
+                data=None,
+                error='{"errorCode": "NO_RESULT", "message": "未获取到API执行结果"}'
+            )
+        
+        # 5. 解析responseInfo，提取token
+        response_info = latest_result.response_info
+        if isinstance(response_info, str):
+            try:
+                response_data = json.loads(response_info)
+            except json.JSONDecodeError:
+                return error_response(
+                    msg="刷新失败，响应格式错误",
+                    data=None,
+                    error='{"errorCode": "PARSE_ERROR", "message": "无法解析响应数据"}'
+                )
+        else:
+            response_data = response_info
+        
+        # 6. 从响应中提取token（假设token在response_data的"token"或"data.token"字段中）
+        extracted_token = None
+        if isinstance(response_data, dict):
+            # 尝试直接获取token
+            extracted_token = response_data.get('token')
+            # 如果没有，尝试从data中获取
+            if not extracted_token and 'data' in response_data:
+                data_obj = response_data['data']
+                if isinstance(data_obj, dict):
+                    extracted_token = data_obj.get('token')
+        
+        if not extracted_token:
+            return error_response(
+                msg="刷新失败，响应中未找到token字段",
+                data=None,
+                error='{"errorCode": "TOKEN_NOT_FOUND", "message": "响应数据中未包含token字段"}'
+            )
+        
+        # 7. 拼接token：token类型 + 空格 + 返回的token
+        token_type = token_info.type  # 假设type字段存储的是token类型，如"Bearer"
+        if not token_type:
+            token_type = "Bearer"  # 默认使用Bearer
+        
+        new_token = f"{token_type} {extracted_token}"
+        
+        # 8. 更新Token表中的token字段
+        await update_token_info(db, token_id, {'token': new_token})
+        
+        return success_response(
+            msg="Token刷新成功",
+            data={
+                "token_id": token_id,
+                "new_token": new_token,
+                "token_type": token_type
+            }
+        )
+        
+    except Exception as e:
+        return error_response(
+            msg=f"刷新失败：{str(e)}",
+            data=None,
+            error=f'{{"errorCode": "REFRESH_ERROR", "message": "{str(e)}"}}'
+        )

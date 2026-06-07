@@ -6,10 +6,13 @@
       :api-method="getTemplateListWithSearch"
       :pagination="pagination"
       :search-fields="searchFields"
+      :show-selection="true"
+      row-key="templateId"
       @add="handleAdd"
       @edit="handleEdit"
       @delete="handleDelete"
       @batch-delete="handleBatchDelete"
+      @selection-change="handleSelectionChange"
       @reset="handleResetSearch"
     >
       <!-- 自定义搜索区域 -->
@@ -216,6 +219,14 @@ const pagination = reactive({
   pageSize: 10,
   total: 0
 })
+
+// 选中行
+const selectedRows = ref([])
+
+// 处理选择变化
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('')

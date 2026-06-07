@@ -14,6 +14,7 @@ class FlowInfo(Base):
     flow_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="主键")
     flow_name = Column(String(50), comment="流程名称")
     description = Column(Text, comment="描述")
+    flow_type = Column(SmallInteger, comment="流程类型")
     project_id = Column(BigInteger, comment="项目id")
     expect_result = Column(Text, comment="预期结果")
     actual_result = Column(Text, comment="实际结果")

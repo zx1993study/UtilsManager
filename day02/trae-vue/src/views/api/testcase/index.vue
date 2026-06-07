@@ -6,10 +6,13 @@
       :api-method="apiTestcaseApi.getTestcaseList"
       :pagination="pagination"
       :search-fields="searchFields"
+      :show-selection="true"
+      row-key="instanceId"
       @add="handleAdd"
       @edit="handleEdit"
       @delete="handleDelete"
       @batch-delete="handleBatchDelete"
+      @selection-change="handleSelectionChange"
     >
       <template #status="{ row }">
         <el-tag :type="getStatusType(row.status)">
@@ -125,6 +128,14 @@ const pagination = reactive({
   pageSize: 10,
   total: 0
 })
+
+// 选中行
+const selectedRows = ref([])
+
+// 处理选择变化
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
 
 // 弹窗控制
 const dialogVisible = ref(false)

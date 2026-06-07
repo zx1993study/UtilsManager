@@ -6,10 +6,13 @@
       :api-method="apiApi.getApiList"
       :pagination="pagination"
       :search-fields="searchFields"
+      :show-selection="true"
+      row-key="apiId"
       @add="handleAdd"
       @edit="handleEdit"
       @delete="handleDelete"
       @batch-delete="handleBatchDelete"
+      @selection-change="handleSelectionChange"
     >
       <template #methodType="{ row }">
         <el-tag :type="getMethodTypeColor(row.methodType)">
@@ -27,6 +30,16 @@
         >
           <el-icon><VideoPlay /></el-icon>
           <span>运行</span>
+        </el-button>
+        
+        <el-button
+          type="primary"
+          size="small"
+          link
+          @click="handleCopy(row)"
+        >
+          <el-icon><DocumentCopy /></el-icon>
+          <span>复制</span>
         </el-button>
         
         <el-button
@@ -118,6 +131,80 @@
         />
       </el-form-item>
     </common-dialog>
+
+    <!-- 复制API弹窗 -->
+    <common-dialog
+      v-model="copyDialogVisible"
+      title="复制API"
+      :form-data="copyFormData"
+      :rules="formRules"
+      :loading="copySubmitLoading"
+      width="700px"
+      @confirm="handleCopySubmit"
+    >
+      <el-form-item label="接口名称" prop="apiName">
+        <el-input v-model="copyFormData.apiName" placeholder="请输入接口名称" />
+      </el-form-item>
+
+      <el-form-item label="URL" prop="methodUrl">
+        <el-input v-model="copyFormData.methodUrl" placeholder="请输入URL" />
+      </el-form-item>
+
+      <el-form-item label="方法类型" prop="methodType">
+        <el-select v-model="copyFormData.methodType" placeholder="请选择方法类型" style="width: 100%">
+          <el-option label="GET" :value="1" />
+          <el-option label="POST" :value="2" />
+          <el-option label="PUT" :value="3" />
+          <el-option label="DELETE" :value="4" />
+          <el-option label="PATCH" :value="5" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="参数类型" prop="paramsPath">
+        <el-input v-model="copyFormData.paramsPath" placeholder="请输入参数类型" />
+      </el-form-item>
+
+      <el-form-item label="请求头" prop="requestHeader">
+        <el-input v-model="copyFormData.requestHeader" placeholder="请输入请求头" />
+      </el-form-item>
+
+      <el-form-item label="所属项目" prop="projectId">
+        <el-select
+          v-model="copyFormData.projectId"
+          placeholder="请选择所属项目"
+          style="width: 100%"
+          @change="handleCopyProjectChange"
+        >
+          <el-option
+            v-for="item in projectOptions"
+            :key="item.projectId"
+            :label="item.projectName"
+            :value="item.projectId"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="Token" prop="tokenId">
+        <el-select
+          v-model="copyFormData.tokenId"
+          placeholder="请先选择项目再选择Token"
+          style="width: 100%"
+          :disabled="!copyFormData.projectId"
+          clearable
+        >
+          <el-option
+            v-for="item in tokenOptions"
+            :key="item.tokenId"
+            :label="item.name"
+            :value="item.tokenId"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="备注" prop="remark">
+        <el-input v-model="copyFormData.remark" type="textarea" placeholder="请输入备注" />
+      </el-form-item>
+    </common-dialog>
   </div>
 </template>
 
@@ -126,7 +213,7 @@ import { ref, reactive, onMounted } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Files } from '@element-plus/icons-vue'
+import { VideoPlay, Files, DocumentCopy } from '@element-plus/icons-vue'
 import * as projectApi from '@/api/project/project'
 import * as tokenApi from '@/api/project/token'
 import * as apiApi from '@/api/api/api'
@@ -164,10 +251,33 @@ const pagination = reactive({
   total: 0
 })
 
+// 选中行
+const selectedRows = ref([])
+
+// 处理选择变化
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
 // 弹窗配置
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const formData = reactive({
+  apiId: null,
+  apiName: '',
+  methodUrl: '',
+  methodType: 1,
+  paramsPath: '',
+  requestHeader: '{"content-type":"application/json"}',
+  projectId: null,
+  tokenId: null,
+  remark: ''
+})
+
+// 复制弹窗配置
+const copyDialogVisible = ref(false)
+const copySubmitLoading = ref(false)
+const copyFormData = reactive({
   apiId: null,
   apiName: '',
   methodUrl: '',
@@ -238,6 +348,23 @@ const handleProjectChange = async (projectId) => {
   }
 }
 
+// 复制弹窗项目切换
+const handleCopyProjectChange = async (projectId) => {
+  copyFormData.tokenId = null
+  
+  if (!projectId) {
+    tokenOptions.value = []
+    return
+  }
+
+  try {
+    const res = await tokenApi.getTokenList({ projectId, pageNum: 1, pageSize: 1000 })
+    tokenOptions.value = res.data?.items || res.data?.list || res.data || []
+  } catch (error) {
+    console.error('加载Token列表失败:', error)
+  }
+}
+
 // 处理新增
 const handleAdd = () => {
   dialogTitle.value = '新增API'
@@ -278,6 +405,45 @@ const handleDelete = (row) => {
       console.error('删除失败:', error)
     }
   }).catch(() => {})
+}
+
+// 处理复制
+const handleCopy = (row) => {
+  // 填充复制表单数据
+  Object.assign(copyFormData, {
+    apiId: null, // 清空ID，因为是新增
+    apiName: row.apiName + ' - 副本',
+    methodUrl: row.methodUrl,
+    methodType: row.methodType,
+    paramsPath: row.paramsPath,
+    requestHeader: row.requestHeader,
+    projectId: row.projectId,
+    tokenId: row.tokenId,
+    remark: row.remark
+  })
+  
+  // 加载Token列表
+  if (row.projectId) {
+    handleCopyProjectChange(row.projectId)
+  }
+  
+  copyDialogVisible.value = true
+}
+
+// 提交复制表单
+const handleCopySubmit = async () => {
+  try {
+    copySubmitLoading.value = true
+    await apiApi.addApi(copyFormData)
+    ElMessage.success('复制成功')
+    copyDialogVisible.value = false
+    tableRef.value?.refresh()
+  } catch (error) {
+    console.error('复制失败:', error)
+    ElMessage.error('复制失败')
+  } finally {
+    copySubmitLoading.value = false
+  }
 }
 
 // 处理批量删除

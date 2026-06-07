@@ -12,9 +12,11 @@ class FlowStep(Base):
     __tablename__ = 'flow_step'
     
     step_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="主键")
+    flow_id = Column(BigInteger, comment="流程id")
     api_id = Column(BigInteger, comment="接口id")
     instance_id = Column(BigInteger, comment="实例id")
     params = Column(Text, comment="参数")
+    flow_type = Column(SmallInteger, comment="流程类型")
     is_batch = Column(String(10), comment="是否批处理")
     status = Column(SmallInteger, comment="状态")
     expect_result = Column(Text, comment="预期结果")

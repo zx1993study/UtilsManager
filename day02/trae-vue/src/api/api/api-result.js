@@ -76,6 +76,6 @@ export function executeApi(instanceId) {
   return request({
     url: '/api/v1/apiExecute/execute',
     method: 'post',
-    data: { executionType: 3, targetId: instanceId }
+    data: { executionType: 1, targetId: instanceId }
   })
 }

@@ -62,7 +62,7 @@
       </el-form-item>
       
       <el-form-item label="部门" prop="deptId">
-        <el-select v-model="formData.deptId" placeholder="请选择部门" style="width: 100%">
+        <el-select filterable v-model="formData.deptId" placeholder="请选择部门" style="width: 100%">
           <el-option label="技术部" value="1" />
           <el-option label="产品部" value="2" />
           <el-option label="运营部" value="3" />
@@ -70,7 +70,7 @@
       </el-form-item>
       
       <el-form-item label="角色" prop="roleIds">
-        <el-select v-model="formData.roleIds" multiple placeholder="请选择角色" style="width: 100%">
+        <el-select filterable v-model="formData.roleIds" multiple placeholder="请选择角色" style="width: 100%">
           <el-option label="管理员" value="1" />
           <el-option label="普通用户" value="2" />
           <el-option label="访客" value="3" />

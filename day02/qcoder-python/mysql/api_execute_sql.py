@@ -35,6 +35,20 @@ def get_api_execution_context(db: Session, instance_id: int) -> Optional[Dict[st
     }
 
 
+def get_existing_instance_ids(db: Session, instance_ids: List[int]) -> set:
+    """返回在 api_instance 表中真实存在的 instance_id 集合
+
+    用于在写入 api_result 前过滤掉不存在的实例，避免触发
+    外键约束 fk_result_instance (api_result.instance_id -> api_instance.instance_id) 失败。
+    """
+    if not instance_ids:
+        return set()
+    rows = db.query(ApiInstance.instance_id).filter(
+        ApiInstance.instance_id.in_(instance_ids)
+    ).all()
+    return {row[0] for row in rows}
+
+
 async def get_instances_by_api_id(db: Session, api_id: int) -> List[ApiInstance]:
     """根据API ID获取所有实例"""
     return db.query(ApiInstance).filter(ApiInstance.api_id == api_id).all()

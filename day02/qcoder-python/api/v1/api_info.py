@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.api_info_schemas import ApiInfoCreate, ApiInfoUpdate, ApiInfoList, ApiInfoInfo
+from schemas.api_info_schemas import ApiInfoCreate, ApiInfoUpdate, ApiInfoList, ApiInfoInfo, BatchDeleteRequest
 from service.api_info_service import (
     get_api_info_service,
     get_api_info_list_service,
     create_api_info_service,
     update_api_info_service,
-    delete_api_info_service
+    delete_api_info_service,
+    delete_api_info_batch_service,
 )
 
 router = APIRouter()
@@ -53,6 +54,13 @@ async def update_api_info(
     """更新接口信息"""
     return await update_api_info_service(db, data)
 
+@router.delete("/apiInfo/batch", response_model=dict)
+async def delete_api_info_batch(
+    request: BatchDeleteRequest, 
+    db: Session = Depends(get_db)
+):
+    """删除接口信息"""
+    return await delete_api_info_batch_service(db, request.ids)
 
 @router.delete("/apiInfo/{item_id}", response_model=dict)
 async def delete_api_info(
@@ -61,3 +69,6 @@ async def delete_api_info(
 ):
     """删除接口信息"""
     return await delete_api_info_service(db, item_id)
+
+
+

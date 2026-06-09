@@ -61,7 +61,7 @@
             <!-- API和实例选择 -->
             <div class="step-form">
               <el-form-item label="API">
-                <el-select 
+                <el-select filterable 
                   v-model="step.apiId" 
                   placeholder="请选择API" 
                   style="width: 250px"
@@ -78,11 +78,12 @@
               </el-form-item>
 
               <el-form-item label="API实例">
-                <el-select 
-                  v-model="step.instanceId" 
-                  placeholder="请选择实例" 
+                <el-select filterable
+                  v-model="step.instanceId"
+                  placeholder="请选择实例"
                   style="width: 250px"
                   :disabled="!step.apiId || !canEditStep(step)"
+                  @change="handleInstanceChange(index)"
                 >
                   <el-option
                     v-for="instance in getInstanceOptions(index)"
@@ -94,15 +95,24 @@
               </el-form-item>
 
               <el-form-item>
-                <el-button 
-                  type="primary" 
+                <el-button
+                  type="primary"
                   size="small"
                   @click="handleRunStep(index)"
                   :loading="step.running"
-                  :disabled="!step.instanceId"
+                  :disabled="!step.instanceId || step.running"
                 >
                   <el-icon><VideoPlay /></el-icon>
                   <span>运行</span>
+                </el-button>
+                <el-button
+                  type="info"
+                  size="small"
+                  @click="handleOpenQuery(index)"
+                  :disabled="step.running"
+                >
+                  <el-icon><Search /></el-icon>
+                  <span>查询参数</span>
                 </el-button>
               </el-form-item>
             </div>
@@ -156,7 +166,7 @@
       @confirm="handleAddStepSubmit"
     >
       <el-form-item label="API" prop="apiId">
-        <el-select 
+        <el-select filterable 
           v-model="addStepFormData.apiId" 
           placeholder="请选择API" 
           style="width: 100%"
@@ -172,11 +182,12 @@
       </el-form-item>
 
       <el-form-item label="API实例" prop="instanceId">
-        <el-select 
-          v-model="addStepFormData.instanceId" 
-          placeholder="请选择实例" 
+        <el-select filterable
+          v-model="addStepFormData.instanceId"
+          placeholder="请选择实例"
           style="width: 100%"
           :disabled="!addStepFormData.apiId"
+          @change="handleAddStepInstanceChange"
         >
           <el-option
             v-for="instance in addStepInstanceOptions"
@@ -188,14 +199,39 @@
       </el-form-item>
 
       <el-form-item label="实例参数" prop="params">
-        <el-input 
-          v-model="addStepFormData.params" 
-          type="textarea" 
+        <el-input
+          v-model="addStepFormData.params"
+          type="textarea"
           :rows="4"
           placeholder="请输入实例参数(JSON格式)"
         />
       </el-form-item>
     </common-dialog>
+
+    <!-- 查询参数弹窗 -->
+    <el-dialog v-model="queryDialogVisible" title="查询参数" width="600px">
+      <el-form label-width="80px">
+        <el-form-item label="参数Key">
+          <el-input
+            v-model="queryKey"
+            placeholder="请输入要查询的key（支持嵌套，如 data.token）"
+            clearable
+            @keyup.enter="handleQueryParam"
+          />
+        </el-form-item>
+      </el-form>
+      <div v-if="queryResult !== null" class="query-result">
+        <div class="response-label">查询结果：</div>
+        <pre class="json-content">{{ queryResult }}</pre>
+      </div>
+      <template #footer>
+        <el-button @click="queryDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleQueryParam">
+          <el-icon><Search /></el-icon>
+          <span>查询</span>
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -203,7 +239,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, ArrowLeft, Plus, Delete } from '@element-plus/icons-vue'
+import { VideoPlay, ArrowLeft, Plus, Delete, Search } from '@element-plus/icons-vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import * as flowApi from '@/api/api/api-flow'
 import * as flowStepApi from '@/api/api/api-flow-step'
@@ -227,6 +263,12 @@ const apiList = ref([])
 
 // 每个步骤的实例选项缓存
 const instanceOptionsCache = ref({})
+
+// 查询参数弹窗
+const queryDialogVisible = ref(false)
+const queryKey = ref('')
+const queryResult = ref(null)
+const queryStepIndex = ref(null)
 
 // 运行流程加载状态
 const runFlowLoading = ref(false)
@@ -300,6 +342,23 @@ const getInstanceOptions = (index) => {
   return []
 }
 
+// 预加载已存在步骤所引用的实例选项
+// 否则二次进入页面时缓存为空，实例下拉框会显示原始 instanceId 且没有可选项
+const preloadStepInstances = async () => {
+  const apiIds = [...new Set(steps.value.map(step => step.apiId).filter(Boolean))]
+  await Promise.all(apiIds.map(apiId => loadInstancesForApi(apiId)))
+
+  // 用所选实例的 instanceJson 回填各步骤的「实例参数」并美化展示
+  steps.value.forEach(step => {
+    if (!step.instanceId) return
+    const options = instanceOptionsCache.value[step.apiId] || []
+    const instance = options.find(item => item.instanceId === step.instanceId)
+    if (instance) {
+      step.params = formatInstanceJson(instance.instanceJson)
+    }
+  })
+}
+
 // 加载指定API的实例列表
 const loadInstancesForApi = async (apiId) => {
   if (instanceOptionsCache.value[apiId]) {
@@ -322,21 +381,40 @@ const handleApiChange = async (index) => {
   const step = steps.value[index]
   step.instanceId = null
   step.params = ''
-  
+
   if (step.apiId) {
     await loadInstancesForApi(step.apiId)
   }
 }
 
-// 判断步骤是否可编辑
-const canEditStep = (step) => {
-  // 如果步骤正在运行或已有结果，则不可编辑
-  return !step.running && !step.result
+// 实例改变事件：用所选实例的 instanceJson 填充实例参数
+const handleInstanceChange = (index) => {
+  const step = steps.value[index]
+  const options = getInstanceOptions(index)
+  const instance = options.find(item => item.instanceId === step.instanceId)
+  step.params = instance ? formatInstanceJson(instance.instanceJson) : ''
 }
 
-// 格式化JSON
+// 判断步骤是否可编辑
+const canEditStep = (step) => {
+  // 仅在执行过程中锁定；执行结束后（无论成功或失败）均可再次编辑重试
+  return !step.running
+}
+
+// 格式化JSON（用于结果展示，空值显示占位符）
 const formatJson = (jsonStr) => {
   if (!jsonStr) return '-'
+  try {
+    const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr
+    return JSON.stringify(obj, null, 2)
+  } catch (e) {
+    return jsonStr
+  }
+}
+
+// 美化实例参数JSON（用于可编辑文本框，空值返回空字符串）
+const formatInstanceJson = (jsonStr) => {
+  if (!jsonStr) return ''
   try {
     const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr
     return JSON.stringify(obj, null, 2)
@@ -353,6 +431,91 @@ const getCodeType = (code) => {
   if (codeNum >= 400 && codeNum < 500) return 'warning'
   if (codeNum >= 500) return 'danger'
   return 'info'
+}
+
+// 在嵌套对象/数组中按 key 查找对应的 value
+// 支持点路径（如 data.token）；否则做深度优先搜索，返回第一个匹配项
+const findValueByKey = (obj, key) => {
+  // 1. 点路径优先精确匹配
+  if (key.includes('.')) {
+    let cur = obj
+    for (const part of key.split('.')) {
+      if (cur && typeof cur === 'object' && part in cur) {
+        cur = cur[part]
+      } else {
+        cur = undefined
+        break
+      }
+    }
+    if (cur !== undefined) return cur
+  }
+  // 2. 深度优先搜索第一个匹配的 key
+  const search = (node) => {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const r = search(item)
+        if (r !== undefined) return r
+      }
+    } else if (node && typeof node === 'object') {
+      if (Object.prototype.hasOwnProperty.call(node, key)) {
+        return node[key]
+      }
+      for (const k of Object.keys(node)) {
+        const r = search(node[k])
+        if (r !== undefined) return r
+      }
+    }
+    return undefined
+  }
+  return search(obj)
+}
+
+// 打开查询参数弹窗
+const handleOpenQuery = (index) => {
+  const step = steps.value[index]
+  if (!step.result || !step.result.responseInfo) {
+    ElMessage.warning('请先运行该步骤以获取响应数据')
+    return
+  }
+  queryStepIndex.value = index
+  queryKey.value = ''
+  queryResult.value = null
+  queryDialogVisible.value = true
+}
+
+// 在 responseInfo 中查询指定 key 的 value
+const handleQueryParam = () => {
+  const key = queryKey.value.trim()
+  if (!key) {
+    ElMessage.warning('请输入要查询的key')
+    return
+  }
+
+  const step = steps.value[queryStepIndex.value]
+  const responseInfo = step?.result?.responseInfo
+  if (!responseInfo) {
+    ElMessage.warning('当前步骤暂无响应数据')
+    return
+  }
+
+  let data
+  try {
+    data = typeof responseInfo === 'string' ? JSON.parse(responseInfo) : responseInfo
+  } catch (e) {
+    ElMessage.error('响应数据不是有效的JSON，无法查询')
+    return
+  }
+
+  const found = findValueByKey(data, key)
+  if (found === undefined) {
+    queryResult.value = null
+    ElMessage.warning(`未在响应中找到 key 为 "${key}" 的值`)
+    return
+  }
+
+  queryResult.value = typeof found === 'object'
+    ? JSON.stringify(found, null, 2)
+    : String(found)
 }
 
 // 运行单个步骤
@@ -377,7 +540,7 @@ const handleRunStep = async (index) => {
       return
     }
   }
-  
+
   step.running = true
   
   try {
@@ -455,13 +618,20 @@ const handleAddStep = () => {
 // 添加步骤弹窗中API改变
 const handleAddStepApiChange = async (apiId) => {
   addStepFormData.instanceId = null
-  
+  addStepFormData.params = ''
+
   if (apiId) {
     const instances = await loadInstancesForApi(apiId)
     addStepInstanceOptions.value = instances
   } else {
     addStepInstanceOptions.value = []
   }
+}
+
+// 添加步骤弹窗中实例改变：用所选实例的 instanceJson 填充实例参数
+const handleAddStepInstanceChange = (instanceId) => {
+  const instance = addStepInstanceOptions.value.find(item => item.instanceId === instanceId)
+  addStepFormData.params = instance ? formatInstanceJson(instance.instanceJson) : ''
 }
 
 // 提交添加步骤
@@ -525,6 +695,8 @@ onMounted(async () => {
     loadSteps(),
     loadApiList()
   ])
+  // 步骤加载完成后，预加载各步骤对应API的实例列表，确保实例下拉框正确显示名称且有数据
+  await preloadStepInstances()
 })
 </script>
 
@@ -633,11 +805,22 @@ onMounted(async () => {
   width: 80px;
 }
 
+/* 实例参数JSON：等宽字体便于阅读对齐 */
+.json-editor :deep(.el-textarea__inner) {
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .result-section {
   margin-top: 15px;
 }
 
 .response-info {
+  margin-top: 10px;
+}
+
+.query-result {
   margin-top: 10px;
 }
 

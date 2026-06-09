@@ -14,9 +14,11 @@ from mysql.token_info_sql import (
 )
 from mysql.api_result_sql import get_latest_result_by_instance_id
 from service.api_execute_service import execute_api_service
+from schemas.api_execute_schemas import ApiExecuteRequest
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
 import json
+from core.logger import logger
 
 
 async def get_token_info_service(db: Session, item_id: int):
@@ -132,6 +134,7 @@ async def refresh_token_service(db: Session, token_id: int):
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "Token不存在"}'
         )
+    logger.info(f"刷新Token：获取到Token信息，token_id={token_id}, instance_id={token_info.instance_id}")
     
     # 2. 检查instance_id是否存在
     instance_id = token_info.instance_id
@@ -144,7 +147,8 @@ async def refresh_token_service(db: Session, token_id: int):
     
     try:
         # 3. 调用API执行服务，重新执行该实例
-        execute_result = await execute_api_service(db, target_id=instance_id, execution_type=1)
+        execute_request = ApiExecuteRequest(execution_type=1, target_id=instance_id)
+        execute_result = await execute_api_service(db, execute_request)
         
         # 4. 获取最新的执行结果
         latest_result = await get_latest_result_by_instance_id(db, instance_id)
@@ -189,8 +193,12 @@ async def refresh_token_service(db: Session, token_id: int):
         
         # 7. 拼接token：token类型 + 空格 + 返回的token
         token_type = token_info.type  # 假设type字段存储的是token类型，如"Bearer"
-        if not token_type:
-            token_type = "Bearer"  # 默认使用Bearer
+        token_map = {
+            1: "Bearer",    
+            2: "Basic",
+            3: "JWT"
+        }
+        token_type = token_map.get(token_info.type, "Bearer")
         
         new_token = f"{token_type} {extracted_token}"
         

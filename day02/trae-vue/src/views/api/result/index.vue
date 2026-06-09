@@ -77,7 +77,7 @@
       @confirm="handleRemarkSubmit"
     >
       <el-form-item label="结果状态" prop="resultStatus">
-        <el-select v-model="remarkFormData.resultStatus" placeholder="请选择结果状态" style="width: 100%">
+        <el-select filterable v-model="remarkFormData.resultStatus" placeholder="请选择结果状态" style="width: 100%">
           <el-option label="正常" :value="1" />
           <el-option label="异常" :value="2" />
           <el-option label="偶现" :value="3" />

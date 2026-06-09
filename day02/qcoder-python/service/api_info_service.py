@@ -56,6 +56,7 @@ async def create_api_info_service(db: Session, data: ApiInfoCreate):
     # 业务逻辑校验：检查是否存在相同的method_url、method_type和project_id组合
     existing = await get_api_info_by_unique_fields(
         db, 
+        api_name=data.api_name,
         method_url=data.method_url,
         method_type=data.method_type,
         project_id=data.project_id
@@ -86,6 +87,22 @@ async def update_api_info_service(db: Session,  data: ApiInfoUpdate):
             msg="更新失败，信息不存在",
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "接口信息不存在"}'
+        )
+    existing = await get_api_info_by_unique_fields(
+        db, 
+        api_name=data.api_name,
+        method_url=data.method_url,
+        method_type=data.method_type,
+        project_id=data.project_id
+    )
+    
+    if existing and existing.api_id != obj.api_id:
+        # 将ORM对象转换为Schema对象
+        schema_existing = ApiInfoInfo.model_validate(existing)
+        return error_response(
+            msg="更新失败，该接口已存在",
+            data=schema_existing,
+            error=f'{{"errorCode": "DUPLICATE_API", "message": "项目ID为{data.project_id}的API中，已存在URL为\'{data.method_url}\'且方法类型为{data.method_type}的接口"}}'
         )
        
     # 将ORM对象转换为Schema对象
@@ -119,3 +136,9 @@ async def delete_api_info_service(db: Session, item_id: int):
         msg="删除成功",
         data={"id": item_id, "message": "接口信息及关联数据已删除"}
     )
+
+async def delete_api_info_batch_service(db: Session, item_ids: list):
+    """批量删除接口信息"""
+    for item_id in item_ids:
+        await delete_api_info_service(db, item_id)
+    return success_response(msg="删除成功", data={"ids": item_ids, "message": "接口信息及关联数据已删除"})

@@ -25,7 +25,7 @@
               <div class="filter-section">
                 <el-form :inline="true" class="filter-form">
                   <el-form-item label="API">
-                    <el-select
+                    <el-select filterable
                       v-model="selectedApiId"
                       placeholder="请选择API"
                       style="width: 100%"
@@ -40,7 +40,7 @@
                     </el-select>
                   </el-form-item>
                   <el-form-item label="API实例">
-                    <el-select
+                    <el-select filterable
                       v-model="selectedInstanceId"
                       placeholder="请选择API实例"
                       style="width: 100%"
@@ -314,7 +314,7 @@
       </el-form-item>
 
       <el-form-item label="字段类型" prop="fieldType">
-        <el-select v-model="templateFormData.fieldType" placeholder="请选择字段类型" style="width: 100%">
+        <el-select filterable v-model="templateFormData.fieldType" placeholder="请选择字段类型" style="width: 100%">
           <el-option label="String" :value="1" />
           <el-option label="Integer" :value="2" />
           <el-option label="Boolean" :value="3" />

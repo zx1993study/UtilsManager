@@ -26,7 +26,7 @@
             clearable
             style="width: 200px"
           />
-          <el-select
+          <el-select filterable
             v-else-if="field.type === 'select'"
             v-model="searchForm[field.prop]"
             :placeholder="field.placeholder || `请选择${field.label}`"

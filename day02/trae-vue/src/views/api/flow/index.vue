@@ -53,7 +53,7 @@
       </el-form-item>
 
       <el-form-item label="所属项目" prop="projectId">
-        <el-select
+        <el-select filterable
           v-model="formData.projectId"
           placeholder="请选择所属项目"
           style="width: 100%"
@@ -92,7 +92,7 @@
       </el-form-item>
 
       <el-form-item label="所属项目" prop="projectId">
-        <el-select
+        <el-select filterable
           v-model="copyFormData.projectId"
           placeholder="请选择所属项目"
           style="width: 100%"

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.flow_info_schemas import FlowInfoCreate, FlowInfoUpdate, FlowInfoList, FlowInfoInfo
+from schemas.flow_info_schemas import FlowInfoCreate, FlowInfoUpdate, FlowInfoList, FlowInfoInfo,FowInfoIds
 from service.flow_info_service import (
     get_flow_info_service,
     get_flow_info_list_service,
@@ -53,7 +53,15 @@ async def update_flow_info(
     """更新流程信息"""
     return await update_flow_info_service(db, data)
 
-
+@router.delete("/batch", response_model=dict)
+async def delete_flow_info(
+    ids: FowInfoIds,
+    db: Session = Depends(get_db)
+):
+    """删除流程信息"""
+    for item_id in ids.ids:
+        await delete_flow_info_service(db, item_id)
+    return {"message": "流程信息删除成功"}
 @router.delete("/{item_id}", response_model=dict)
 async def delete_flow_info(
     item_id: int,

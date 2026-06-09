@@ -64,7 +64,7 @@
               <div class="filter-section">
                 <el-form :inline="true" class="filter-form">
                   <el-form-item label="API">
-                    <el-select
+                    <el-select filterable
                       v-model="selectedApiId"
                       placeholder="请选择API"
                       style="width: 200px"
@@ -79,7 +79,7 @@
                     </el-select>
                   </el-form-item>
                   <el-form-item label="API实例">
-                    <el-select
+                    <el-select filterable
                       v-model="selectedInstanceId"
                       placeholder="请选择API实例"
                       style="width: 200px"

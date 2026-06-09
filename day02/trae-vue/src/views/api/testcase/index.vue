@@ -32,7 +32,7 @@
       @confirm="handleSubmit"
     >
       <el-form-item label="项目" prop="projectId">
-        <el-select
+        <el-select filterable
           v-model="formData.projectId"
           placeholder="请选择项目"
           style="width: 100%"
@@ -48,7 +48,7 @@
       </el-form-item>
 
       <el-form-item label="API" prop="apiId">
-        <el-select
+        <el-select filterable
           v-model="formData.apiId"
           placeholder="请选择API"
           style="width: 100%"

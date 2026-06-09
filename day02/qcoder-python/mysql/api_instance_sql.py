@@ -8,6 +8,7 @@ from models.api_instance_model import ApiInstance
 from typing import List, Optional, Tuple
 from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
 from schemas.api_instance_schemas import ApiInstanceList
+from models.api_info_model import ApiInfo
 
 async def get_api_instance_by_id(db: Session, instance_id: int) -> Optional[ApiInstance]:
     """根据ID获取参数实例"""
@@ -59,7 +60,7 @@ async def get_api_instance_list(
     total = db.execute(count_stmt).scalar()
 
     # 查询分页数据
-    items = db.query(ApiInstance).filter(*data.filter_params()).offset(offset).limit(data.page_size).all()
+    items = db.query(ApiInstance).filter(*data.filter_params()).order_by(ApiInstance.instance_id.desc()).offset(offset).limit(data.page_size).all()
 
     return items, total
 

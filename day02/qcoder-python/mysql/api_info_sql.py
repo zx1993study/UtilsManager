@@ -54,6 +54,7 @@ async def get_api_info_by_id(db: Session, api_id: int) -> Optional[ApiInfo]:
 
 async def get_api_info_by_unique_fields(
     db: Session, 
+    api_name: str, 
     method_url: str, 
     method_type: int, 
     project_id: int
@@ -71,6 +72,7 @@ async def get_api_info_by_unique_fields(
     """
     return db.query(ApiInfo).filter(
         and_(
+            ApiInfo.api_name == api_name,        
             ApiInfo.method_url == method_url,
             ApiInfo.method_type == method_type,
             ApiInfo.project_id == project_id
@@ -114,7 +116,7 @@ async def get_api_info_list(
         ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
     ).outerjoin(
         TokenInfo, ApiInfo.token_id == TokenInfo.token_id
-    ).filter(*data.filter_params()).offset(offset).limit(data.page_size).all()
+    ).filter(*data.filter_params()).order_by(ApiInfo.api_id.desc()).offset(offset).limit(data.page_size).all()
     
     # 将查询结果转换为ApiInfoInfo对象列表
     result_list = []

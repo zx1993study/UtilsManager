@@ -70,3 +70,7 @@ class ApiInfoInfo(ApiInfoBase):
         if dt is None:
             return None
         return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int] = Field(..., description="主键列表")
+    

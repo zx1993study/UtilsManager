@@ -65,3 +65,7 @@ class FlowInfoInfo(FlowInfoBase):
         if dt is None:
             return None
         return dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+class FowInfoIds(BaseModel):
+    """流程信息ID列表"""
+    ids: list[int] = Field(..., description="流程ID列表")

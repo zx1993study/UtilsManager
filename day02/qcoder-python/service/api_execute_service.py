@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 from models.api_result_model import ApiResult
 from schemas.api_execute_schemas import ApiExecuteRequest, ApiExecuteResult, BatchApiExecuteResult
-from mysql.api_execute_sql import get_api_execution_context, get_instances_by_api_id, get_instances_by_project_id, update_api_instance_exec_count
+from mysql.api_execute_sql import get_api_execution_context, get_instances_by_api_id, get_instances_by_project_id, update_api_instance_exec_count, get_existing_instance_ids
 from mysql.api_result_sql import batch_create_api_results
 from core.responsemsg import success_response, error_response
 from core.logger import logger
@@ -204,9 +204,22 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
                 results.append(res)
                 
         # 批量保存结果到 api_result
+        # 仅保存 instance_id 在 api_instance 中真实存在的结果，
+        # 否则会触发外键约束 fk_result_instance 失败（如执行了已删除/不存在的实例）。
+        # 未找到的实例仍保留在返回结果中用于前端展示，但不写库。
         if results:
-            await batch_create_api_results(db, results)
-            
+            valid_instance_ids = get_existing_instance_ids(
+                db, [r["instance_id"] for r in results]
+            )
+            persistable = [r for r in results if r["instance_id"] in valid_instance_ids]
+            skipped = len(results) - len(persistable)
+            if skipped:
+                logger.warning(
+                    f"跳过 {skipped} 条结果入库：对应 instance_id 在 api_instance 中不存在"
+                )
+            if persistable:
+                await batch_create_api_results(db, persistable)
+
         return success_response(msg=f"执行完成，共 {len(results)} 条结果", data=results)
         
     except Exception as e:

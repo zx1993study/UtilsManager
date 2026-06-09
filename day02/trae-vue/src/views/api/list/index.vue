@@ -73,7 +73,7 @@
       </el-form-item>
 
       <el-form-item label="方法类型" prop="methodType">
-        <el-select v-model="formData.methodType" placeholder="请选择方法类型" style="width: 100%">
+        <el-select filterable v-model="formData.methodType" placeholder="请选择方法类型" style="width: 100%">
           <el-option label="GET" :value="1" />
           <el-option label="POST" :value="2" />
           <el-option label="PUT" :value="3" />
@@ -91,7 +91,7 @@
       </el-form-item>
 
       <el-form-item label="所属项目" prop="projectId">
-        <el-select
+        <el-select filterable
           v-model="formData.projectId"
           placeholder="请选择所属项目"
           style="width: 100%"
@@ -107,7 +107,7 @@
       </el-form-item>
 
       <el-form-item label="Token" prop="tokenId">
-        <el-select
+        <el-select filterable
           v-model="formData.tokenId"
           placeholder="请先选择项目再选择Token"
           style="width: 100%"
@@ -116,7 +116,7 @@
           <el-option
             v-for="item in tokenOptions"
             :key="item.tokenId"
-            :label="item.tokenName"
+            :label="item.name"
             :value="item.tokenId"
           />
         </el-select>
@@ -151,7 +151,7 @@
       </el-form-item>
 
       <el-form-item label="方法类型" prop="methodType">
-        <el-select v-model="copyFormData.methodType" placeholder="请选择方法类型" style="width: 100%">
+        <el-select filterable v-model="copyFormData.methodType" placeholder="请选择方法类型" style="width: 100%">
           <el-option label="GET" :value="1" />
           <el-option label="POST" :value="2" />
           <el-option label="PUT" :value="3" />
@@ -169,7 +169,7 @@
       </el-form-item>
 
       <el-form-item label="所属项目" prop="projectId">
-        <el-select
+        <el-select filterable
           v-model="copyFormData.projectId"
           placeholder="请选择所属项目"
           style="width: 100%"
@@ -185,7 +185,7 @@
       </el-form-item>
 
       <el-form-item label="Token" prop="tokenId">
-        <el-select
+        <el-select filterable
           v-model="copyFormData.tokenId"
           placeholder="请先选择项目再选择Token"
           style="width: 100%"

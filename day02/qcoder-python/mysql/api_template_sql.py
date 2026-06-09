@@ -69,7 +69,7 @@ async def get_api_template_list(
         ApiInfo, ApiTemplate.api_id == ApiInfo.api_id
     ).outerjoin(
         ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
-    ).filter(*data.filter_params()).offset(offset).limit(data.page_size).all()
+    ).filter(*data.filter_params()).order_by(ApiTemplate.template_id.desc(),ApiInfo.api_id.desc()).offset(offset).limit(data.page_size).all()
     
     # 将查询结果转换为字典列表
     result_list = []

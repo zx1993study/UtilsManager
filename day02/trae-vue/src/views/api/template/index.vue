@@ -18,7 +18,7 @@
       <!-- 自定义搜索区域 -->
       <template #projectSearch>
         <el-form-item label="项目">
-          <el-select
+          <el-select filterable
             v-model="searchProjectId"
             placeholder="请选择项目"
             clearable
@@ -37,7 +37,7 @@
       
       <template #apiSearch>
         <el-form-item label="API">
-          <el-select
+          <el-select filterable
             v-model="searchApiId"
             placeholder="请先选择项目"
             clearable
@@ -65,7 +65,7 @@
       @confirm="handleSubmit"
     >
       <el-form-item label="项目" prop="projectId">
-        <el-select
+        <el-select filterable
           v-model="formData.projectId"
           placeholder="请选择项目"
           style="width: 100%"
@@ -81,7 +81,7 @@
       </el-form-item>
       
       <el-form-item label="API" prop="apiId">
-        <el-select
+        <el-select filterable
           v-model="formData.apiId"
           placeholder="请选择API"
           style="width: 100%"
@@ -101,7 +101,7 @@
       </el-form-item>
       
       <el-form-item label="字段类型" prop="fieldType">
-        <el-select v-model="formData.fieldType" placeholder="请选择字段类型" style="width: 100%">
+        <el-select filterable v-model="formData.fieldType" placeholder="请选择字段类型" style="width: 100%">
           <el-option label="String" :value="1" />
           <el-option label="Integer" :value="2" />
           <el-option label="Boolean" :value="3" />

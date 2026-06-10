@@ -14,18 +14,33 @@ async def get_sys_user_by_id(db: Session, user_id: int) -> Optional[SysUser]:
     return db.query(SysUser).filter(SysUser.user_id == user_id).first()
 
 
-async def get_sys_user_by_nickname(db: Session, nickname: str) -> Optional[SysUser]:
-    """根据昵称获取系统用户
+async def get_sys_user_by_username(db: Session, username: str) -> Optional[SysUser]:
+    """根据用户名获取系统用户（用于登录认证）
+
+    Args:
+        db: 数据库会话
+        username: 用户名
+
+    Returns:
+        Optional[SysUser]: 如果存在则返回系统用户，否则返回None
+    """
+    return db.query(SysUser).filter(
+        SysUser.username == username
+    ).first()
+
+
+async def get_sys_user_by_username(db: Session, username: str) -> Optional[SysUser]:
+    """根据用户名获取系统用户
     
     Args:
         db: 数据库会话
-        nickname: 用户昵称
+        username: 用户名
         
     Returns:
         Optional[SysUser]: 如果存在则返回系统用户，否则返回None
     """
     return db.query(SysUser).filter(
-        SysUser.nickname == nickname
+        SysUser.username == username
     ).first()
 
 
@@ -75,10 +90,8 @@ async def update_sys_user(db: Session, user_id: int, data: dict) -> Optional[Sys
     return db_obj
 
 
-async def delete_sys_user(db: Session, user_id: int) -> Optional[SysUser]:
+async def delete_sys_user(db: Session, user_ids: list[int]) -> Optional[SysUser]:
     """删除系统用户"""
-    db_obj = db.query(SysUser).filter(SysUser.user_id == user_id).first()
-    if db_obj:
-        db.delete(db_obj)
-        db.commit()
+    db_obj = db.query(SysUser).filter(SysUser.user_id.in_(user_ids)).delete(synchronize_session=False)
+    db.commit()
     return db_obj

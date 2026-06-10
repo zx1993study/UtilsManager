@@ -31,7 +31,11 @@ class SysUserCreate(SysUserBase):
 
 class SysUserUpdate(SysUserBase):
     """系统用户更新Schema"""
-    pass
+    user_id: int = Field(..., description="用户id")
+
+class SysUserIds(BaseModel):
+    """系统用户id列表"""
+    ids: list[int] = Field(..., description="系统用户id列表")
 
 
 class SysUserInfo(SysUserBase):

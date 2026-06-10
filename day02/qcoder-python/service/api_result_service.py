@@ -74,6 +74,27 @@ async def update_api_result_service(db: Session,  data: ApiResultUpdate):
     schema_obj =  ApiResultInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
+async def delete_api_result_batch_service(db: Session, ids: list[int]):
+    """批量删除API结果"""
+    deleted_ids = []
+    not_found_ids = []
+    
+    for item_id in ids:
+        existing = await get_api_result_by_id(db, item_id)
+        if not existing:
+            not_found_ids.append(item_id)
+            continue
+        
+        await delete_api_result(db, item_id)
+        deleted_ids.append(item_id)
+    
+    return success_response(
+        msg="批量删除完成",
+        data={
+            "deleted_ids": deleted_ids,
+            "not_found_ids": not_found_ids
+        }
+    )
 
 async def delete_api_result_service(db: Session, item_id: int):
     """删除API结果"""

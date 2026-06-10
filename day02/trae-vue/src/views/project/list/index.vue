@@ -6,6 +6,8 @@
       :api-method="projectApi.getProjectList"
       :pagination="pagination"
       :search-fields="searchFields"
+      :show-selection="true"
+      row-key="projectId"
       @add="handleAdd"
       @edit="handleEdit"
       @delete="handleDelete"
@@ -66,6 +68,7 @@ import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
+import { handleApiResponse } from '@/utils/responseHandler'
 import * as projectApi from '@/api/project/project'
 
 const tableRef = ref(null)
@@ -129,9 +132,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await projectApi.deleteProject(row.projectId)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await projectApi.deleteProject(row.projectId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -147,9 +151,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.projectId)
-      await projectApi.batchDeleteProject(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await projectApi.batchDeleteProject(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -168,12 +173,13 @@ const handleParseSwagger = (row) => {
     }
   ).then(async () => {
     try {
-      await projectApi.parseSwagger({
+      const res = await projectApi.parseSwagger({
         projectId: row.projectId,
         projectSwagger: row.projectSwagger
       })
-      ElMessage.success('Swagger解析成功')
-      tableRef.value?.refresh()
+      if (handleApiResponse(res, 'Swagger解析成功', 'Swagger解析失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('Swagger解析失败:', error)
       ElMessage.error('Swagger解析失败')
@@ -185,15 +191,13 @@ const handleParseSwagger = (row) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
-    if (formData.projectId) {
-      await projectApi.updateProject(formData)
-      ElMessage.success('编辑成功')
-    } else {
-      await projectApi.addProject(formData)
-      ElMessage.success('新增成功')
+    const res = formData.projectId
+      ? await projectApi.updateProject(formData)
+      : await projectApi.addProject(formData)
+    if (handleApiResponse(res, formData.projectId ? '编辑成功' : '新增成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
   } catch (error) {
     console.error('提交失败:', error)
   } finally {

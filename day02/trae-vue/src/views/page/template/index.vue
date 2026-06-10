@@ -37,6 +37,7 @@ import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as pageTemplateApi from '@/api/page/page-template'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -88,9 +89,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await pageTemplateApi.deletePageTemplate(row.id)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await pageTemplateApi.deletePageTemplate(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -105,9 +107,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.id)
-      await pageTemplateApi.batchDeletePageTemplate(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await pageTemplateApi.batchDeletePageTemplate(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -117,15 +120,16 @@ const handleBatchDelete = async (rows) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
+    let res
     if (formData.id) {
-      await pageTemplateApi.updatePageTemplate(formData)
-      ElMessage.success('编辑成功')
+      res = await pageTemplateApi.updatePageTemplate(formData)
     } else {
-      await pageTemplateApi.addPageTemplate(formData)
-      ElMessage.success('新增成功')
+      res = await pageTemplateApi.addPageTemplate(formData)
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
+    if (handleApiResponse(res, formData.id ? '编辑成功' : '新增成功', formData.id ? '编辑失败' : '新增失败')) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
+    }
   } catch (error) {
     console.error('提交失败:', error)
   } finally {

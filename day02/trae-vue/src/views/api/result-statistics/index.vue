@@ -90,6 +90,7 @@ import { ArrowLeft, Files, CircleCheck, Delete } from '@element-plus/icons-vue'
 import CommonTable from '@/components/CommonTable.vue'
 import * as apiApi from '@/api/api/api'
 import * as apiResultApi from '@/api/api/api-result'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,10 +223,11 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiResultApi.deleteApiResult(row.id)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
-      await loadStatistics()
+      const res = await apiResultApi.deleteApiResult(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+        await loadStatistics()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -241,10 +243,11 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.id)
-      await apiResultApi.batchDeleteApiResult(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
-      await loadStatistics()
+      const res = await apiResultApi.batchDeleteApiResult(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+        await loadStatistics()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -259,10 +262,11 @@ const handleClearAll = () => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiResultApi.clearTestResults()
-      ElMessage.success('清空成功')
-      tableRef.value?.refresh()
-      await loadStatistics()
+      const res = await apiResultApi.clearTestResults()
+      if (handleApiResponse(res, '清空成功', '清空失败')) {
+        tableRef.value?.refresh()
+        await loadStatistics()
+      }
     } catch (error) {
       console.error('清空失败:', error)
     }

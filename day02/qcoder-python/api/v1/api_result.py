@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.api_result_schemas import ApiResultCreate, ApiResultUpdate, ApiResultInfo, ApiResultList
+from schemas.api_result_schemas import ApiResultCreate, ApiResultUpdate, ApiResultInfo, ApiResultList, ApiResultBatchDelete
 from service.api_result_service import (
     get_api_result_service,
     get_api_result_list_service,
     create_api_result_service,
     update_api_result_service,
     delete_api_result_service,
+    delete_api_result_batch_service,
     get_latest_result_by_api_id_service,
     get_latest_result_by_instance_id_service
 )
@@ -57,7 +58,13 @@ async def update_api_result(
     """更新API结果"""
     return await update_api_result_service(db,  data)
 
-
+@router.delete("/apiResult/batch", response_model=dict)
+async def delete_api_result(
+    ids: ApiResultBatchDelete,
+    db: Session = Depends(get_db)
+):
+    """删除API结果"""
+    return await delete_api_result_batch_service(db, ids.ids)
 @router.delete("/apiResult/{item_id}", response_model=dict)
 async def delete_api_result(
     item_id: int,

@@ -210,6 +210,7 @@ import * as apiTemplateApi from '@/api/api/api-template'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as apiResultApi from '@/api/api/api-result'
 import { apiTemplateConfig, apiTestcaseConfig } from '@/config/table-config'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const route = useRoute()
 const router = useRouter()
@@ -377,7 +378,7 @@ const loadInstanceList = async (apiId) => {
 const loadLatestResultByApiId = async (apiId) => {
   try {
     const res = await apiResultApi.getLatestResultByApiId(apiId)
-    if (res.code === 200 && res.data) {
+    if (res.success && res.data) {
       currentResult.value = res.data
       // 同步更新选中的实例ID
       selectedInstanceId.value = res.data.instanceId
@@ -392,7 +393,7 @@ const loadLatestResultByApiId = async (apiId) => {
 const loadLatestResultByInstanceId = async (instanceId) => {
   try {
     const res = await apiResultApi.getLatestResultByInstanceId(instanceId)
-    if (res.code === 200 && res.data) {
+    if (res.success && res.data) {
       currentResult.value = res.data
     }
   } catch (error) {
@@ -474,11 +475,12 @@ const handleDeleteTemplate = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiTemplateApi.deleteTemplate(row.id)
-      ElMessage.success('删除成功')
-      templateTableRef.value?.refresh()
-      if (selectedTemplateId.value === row.id) {
-        selectedTemplateId.value = null
+      const res = await apiTemplateApi.deleteTemplate(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        templateTableRef.value?.refresh()
+        if (selectedTemplateId.value === row.id) {
+          selectedTemplateId.value = null
+        }
       }
     } catch (error) {
       console.error('删除失败:', error)
@@ -504,9 +506,10 @@ const handleDeleteTestcase = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiTestcaseApi.deleteTestCase(row.id)
-      ElMessage.success('删除成功')
-      testcaseTableRef.value?.refresh()
+      const res = await apiTestcaseApi.deleteTestCase(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        testcaseTableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -522,9 +525,10 @@ const handleBatchDeleteTestcase = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.id)
-      await apiTestcaseApi.batchDeleteTestCase(ids)
-      ElMessage.success('批量删除成功')
-      testcaseTableRef.value?.refresh()
+      const res = await apiTestcaseApi.batchDeleteTestCase(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        testcaseTableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -539,20 +543,20 @@ const handleRunTestcase = (row) => {
     type: 'info'
   }).then(async () => {
     try {
-      await apiTestcaseApi.executeTestcase(row.instanceId)
-      ElMessage.success('运行成功')
-      
-      // 刷新测试用例列表
-      testcaseTableRef.value?.refresh()
-      
-      // 如果当前选中的实例ID与运行的实例ID相同，刷新结果详情
-      if (selectedInstanceId.value === row.instanceId) {
-        await loadLatestResultByInstanceId(row.instanceId)
-      }
-      
-      // 如果在结果详情选项卡，且当前API与运行的用例所属API相同，刷新最新结果
-      if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
-        await loadLatestResultByApiId(selectedApiId.value)
+      const res = await apiTestcaseApi.executeTestcase(row.instanceId)
+      if (handleApiResponse(res, '运行成功', '运行失败')) {
+        // 刷新测试用例列表
+        testcaseTableRef.value?.refresh()
+
+        // 如果当前选中的实例ID与运行的实例ID相同，刷新结果详情
+        if (selectedInstanceId.value === row.instanceId) {
+          await loadLatestResultByInstanceId(row.instanceId)
+        }
+
+        // 如果在结果详情选项卡，且当前API与运行的用例所属API相同，刷新最新结果
+        if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
+          await loadLatestResultByApiId(selectedApiId.value)
+        }
       }
     } catch (error) {
       console.error('运行失败:', error)
@@ -580,18 +584,18 @@ const handleBatchRunTestcase = () => {
   }).then(async () => {
     try {
       const ids = selectedTestcaseRows.value.map(item => item.instanceId)
-      await apiTestcaseApi.batchExecuteTestcase(ids)
-      ElMessage.success('批量运行成功')
-      
-      // 刷新测试用例列表
-      testcaseTableRef.value?.refresh()
-      
-      // 清空选择
-      selectedTestcaseRows.value = []
-      
-      // 刷新当前API的最新结果
-      if (selectedApiId.value) {
-        await loadLatestResultByApiId(selectedApiId.value)
+      const res = await apiTestcaseApi.batchExecuteTestcase(ids)
+      if (handleApiResponse(res, '批量运行成功', '批量运行失败')) {
+        // 刷新测试用例列表
+        testcaseTableRef.value?.refresh()
+
+        // 清空选择
+        selectedTestcaseRows.value = []
+
+        // 刷新当前API的最新结果
+        if (selectedApiId.value) {
+          await loadLatestResultByApiId(selectedApiId.value)
+        }
       }
     } catch (error) {
       console.error('批量运行失败:', error)

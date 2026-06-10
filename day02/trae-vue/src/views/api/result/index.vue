@@ -104,6 +104,7 @@ import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View, Edit, Delete } from '@element-plus/icons-vue'
 import * as apiResultApi from '@/api/api/api-result'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 
@@ -235,14 +236,15 @@ const handleEditRemark = (row) => {
 const handleRemarkSubmit = async () => {
   try {
     remarkSubmitLoading.value = true
-    await apiResultApi.updateTestResult({
+    const res = await apiResultApi.updateTestResult({
       resultId: remarkFormData.resultId,
       resultStatus: remarkFormData.resultStatus,
       remark: remarkFormData.remark
     })
-    ElMessage.success('更新成功')
-    remarkDialogVisible.value = false
-    tableRef.value?.refresh()
+    if (handleApiResponse(res, '更新成功', '更新失败')) {
+      remarkDialogVisible.value = false
+      tableRef.value?.refresh()
+    }
   } catch (error) {
     console.error('更新失败:', error)
     ElMessage.error('更新失败')
@@ -258,9 +260,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiResultApi.deleteTestResult(row.resultId)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await apiResultApi.deleteTestResult(row.resultId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -275,9 +278,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.resultId)
-      await apiResultApi.batchDeleteTestResult(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await apiResultApi.batchDeleteTestResult(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }

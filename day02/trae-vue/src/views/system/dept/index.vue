@@ -62,6 +62,7 @@ import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as deptApi from '@/api/system/dept'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -141,9 +142,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await deptApi.deleteDept(row.id)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await deptApi.deleteDept(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -159,9 +161,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.id)
-      await deptApi.batchDeleteDept(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await deptApi.batchDeleteDept(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -172,15 +175,22 @@ const handleBatchDelete = async (rows) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
+    let res
+    let okMsg
+    let failMsg
     if (formData.id) {
-      await deptApi.updateDept(formData)
-      ElMessage.success('编辑成功')
+      res = await deptApi.updateDept(formData)
+      okMsg = '编辑成功'
+      failMsg = '编辑失败'
     } else {
-      await deptApi.addDept(formData)
-      ElMessage.success('新增成功')
+      res = await deptApi.addDept(formData)
+      okMsg = '新增成功'
+      failMsg = '新增失败'
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
+    if (handleApiResponse(res, okMsg, failMsg)) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
+    }
   } catch (error) {
     console.error('提交失败:', error)
   } finally {

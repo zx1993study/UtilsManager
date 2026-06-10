@@ -218,6 +218,7 @@ import * as projectApi from '@/api/project/project'
 import * as tokenApi from '@/api/project/token'
 import * as apiApi from '@/api/api/api'
 import { useRouter } from 'vue-router'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -398,9 +399,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiApi.deleteApi(row.apiId)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await apiApi.deleteApi(row.apiId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -434,10 +436,11 @@ const handleCopy = (row) => {
 const handleCopySubmit = async () => {
   try {
     copySubmitLoading.value = true
-    await apiApi.addApi(copyFormData)
-    ElMessage.success('复制成功')
-    copyDialogVisible.value = false
-    tableRef.value?.refresh()
+    const res = await apiApi.addApi(copyFormData)
+    if (handleApiResponse(res, '复制成功', '复制失败')) {
+      copyDialogVisible.value = false
+      tableRef.value?.refresh()
+    }
   } catch (error) {
     console.error('复制失败:', error)
     ElMessage.error('复制失败')
@@ -455,9 +458,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.apiId)
-      await apiApi.batchDeleteApi(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await apiApi.batchDeleteApi(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -468,15 +472,16 @@ const handleBatchDelete = async (rows) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
+    let res
     if (formData.apiId) {
-      await apiApi.updateApi(formData)
-      ElMessage.success('编辑成功')
+      res = await apiApi.updateApi(formData)
     } else {
-      await apiApi.addApi(formData)
-      ElMessage.success('新增成功')
+      res = await apiApi.addApi(formData)
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
+    if (handleApiResponse(res, formData.apiId ? '编辑成功' : '新增成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
+    }
   } catch (error) {
     console.error('提交失败:', error)
   } finally {
@@ -504,7 +509,7 @@ const handleRun = async (row) => {
     // 调用API执行接口
     const res = await apiApi.executeApiTest(row.apiId)
     console.log('运行结果:', res)
-    ElMessage.success('运行成功')
+    handleApiResponse(res, '运行成功', '运行失败')
   } catch (error) {
     console.error('运行失败:', error)
     ElMessage.error('运行失败')

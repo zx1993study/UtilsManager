@@ -6,19 +6,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.sys_user_schemas import SysUserCreate, SysUserUpdate, SysUserInfo
+from schemas.sys_user_schemas import SysUserCreate, SysUserUpdate, SysUserInfo,SysUserIds
 from service.sys_user_service import (
     get_sys_user_service,
     get_sys_user_list_service,
     create_sys_user_service,
     update_sys_user_service,
-    delete_sys_user_service
+    delete_sys_user_service,
+    delete_sys_user_batch_service
 )
 
-router = APIRouter(prefix="/sysUser", tags=["系统用户"])
+router = APIRouter()
 
 
-@router.get("/", response_model=dict)
+@router.get("/sysUser", response_model=dict)
 async def list_sys_user(
     page_num: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
@@ -28,7 +29,7 @@ async def list_sys_user(
     return await get_sys_user_list_service(db, page_num, page_size)
 
 
-@router.get("/{item_id}", response_model=dict)
+@router.get("/sysUser/{item_id}", response_model=dict)
 async def get_sys_user(
     item_id: int,
     db: Session = Depends(get_db)
@@ -37,7 +38,7 @@ async def get_sys_user(
     return await get_sys_user_service(db, item_id)
 
 
-@router.post("/", response_model=dict)
+@router.post("/sysUser", response_model=dict)
 async def create_sys_user(
     data: SysUserCreate,
     db: Session = Depends(get_db)
@@ -46,17 +47,22 @@ async def create_sys_user(
     return await create_sys_user_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/sysUser", response_model=dict)
 async def update_sys_user(
-    item_id: int,
     data: SysUserUpdate,
     db: Session = Depends(get_db)
 ):
     """更新系统用户"""
-    return await update_sys_user_service(db, item_id, data)
+    return await update_sys_user_service(db, data.user_id, data)
 
-
-@router.delete("/{item_id}", response_model=dict)
+@router.delete("/sysUser/batch", response_model=dict)
+async def delete_sys_user(
+    data: SysUserIds,
+    db: Session = Depends(get_db)
+):
+    """删除系统用户"""
+    return await delete_sys_user_batch_service(db, data.ids)
+@router.delete("/sysUser/{item_id}", response_model=dict)
 async def delete_sys_user(
     item_id: int,
     db: Session = Depends(get_db)

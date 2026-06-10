@@ -9,11 +9,48 @@ from typing import List, Optional, Tuple
 from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
 from schemas.api_instance_schemas import ApiInstanceList
 from models.api_info_model import ApiInfo
+from models.project_info_model import ProjectInfo
 
-async def get_api_instance_by_id(db: Session, instance_id: int) -> Optional[ApiInstance]:
+async def get_api_instance_by_id(db: Session, instance_id: int) -> Optional[dict]:
     """根据ID获取参数实例"""
-    return db.query(ApiInstance).filter(ApiInstance.instance_id == instance_id).first()
+    item = db.query(
+                ApiInstance,
+                ApiInfo.api_name,
+                ProjectInfo.project_name,
+                ProjectInfo.project_id,
+                ApiInfo.method_url,
+                ApiInfo.method_type,
+                ProjectInfo.project_address       
+            ).join(
+                ApiInfo,ApiInfo.api_id == ApiInstance.api_id
+            ).join(
+                ProjectInfo,ProjectInfo.project_id == ApiInfo.project_id
+            ).filter(ApiInstance.instance_id == instance_id).first()
+    if item:
+        return get_api_instance_detail_dict(item)
 
+def get_api_instance_detail_dict(api_instance_tuple) -> dict:
+    """将查询结果元组转换为字典"""
+    ApiInstance, api_name, project_name, project_id, method_url, method_type, project_address = api_instance_tuple
+    return {
+        "instance_id": ApiInstance.instance_id,
+        "api_id": ApiInstance.api_id,
+        "instance_name": ApiInstance.instance_name,
+        "instance_json": ApiInstance.instance_json,
+        "create_time": ApiInstance.create_time,
+        "update_time": ApiInstance.update_time,
+        "description": ApiInstance.description,
+        "remark": ApiInstance.remark,
+        "status": ApiInstance.status,
+        "exec_count": ApiInstance.exec_count,
+        "expect_result": ApiInstance.expect_result,
+        "api_name": api_name,
+        "project_name": project_name,
+        "project_id": project_id,
+        "method_url": method_url,
+        "method_type": method_type,
+        "project_address": project_address
+    }
 
 async def get_api_instance_by_unique_fields(
     db: Session,
@@ -37,11 +74,20 @@ async def get_api_instance_by_unique_fields(
         )
     ).first()
 
+async def get_api_instance_count(db: Session,data: ApiInstanceList) -> int:
+    """获取参数实例总记录数"""
+    count_stmt = select(func.count()).select_from(ApiInstance).join(
+                ApiInfo,ApiInfo.api_id == ApiInstance.api_id
+            ).join(
+                ProjectInfo,ProjectInfo.project_id == ApiInfo.project_id
+            ).filter(*data.filter_params())
+    total = db.execute(count_stmt).scalar()
+    return total
 
 async def get_api_instance_list(
     db: Session,
     data: ApiInstanceList
-) -> Tuple[List[ApiInstance], int]:
+) -> Tuple[List[dict], int]:
     """获取参数实例列表（分页）
 
     Args:
@@ -50,19 +96,34 @@ async def get_api_instance_list(
         page_size: 每页大小
 
     Returns:
-        Tuple[List[ApiInstance], int]: 数据列表和总记录数
+        Tuple[List[dict], int]: 数据列表和总记录数
     """
     # 计算偏移量
     offset = (data.page_num - 1) * data.page_size
 
     # 查询总记录数
-    count_stmt = select(func.count()).select_from(ApiInstance).filter(*data.filter_params())
-    total = db.execute(count_stmt).scalar()
+    total = await get_api_instance_count(db, data)
 
     # 查询分页数据
-    items = db.query(ApiInstance).filter(*data.filter_params()).order_by(ApiInstance.instance_id.desc()).offset(offset).limit(data.page_size).all()
+    items = db.query(
+                ApiInstance,
+                ApiInfo.api_name,
+                ProjectInfo.project_name,
+                ProjectInfo.project_id,
+                ApiInfo.method_url,
+                ApiInfo.method_type,
+                ProjectInfo.project_address       
+            ).join(
+                ApiInfo,ApiInfo.api_id == ApiInstance.api_id
+            ).join(
+                ProjectInfo,ProjectInfo.project_id == ApiInfo.project_id
+            ).filter(*data.filter_params()).order_by(ApiInstance.instance_id.desc()).offset(offset).limit(data.page_size).all()
+    result_list = []
+    for item in items:
+        result_dict = get_api_instance_detail_dict(item)
+        result_list.append(result_dict)
 
-    return items, total
+    return result_list, total
 
 
 async def get_api_instance_list_by_api_id(

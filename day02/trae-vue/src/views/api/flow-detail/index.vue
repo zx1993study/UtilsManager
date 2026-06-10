@@ -105,28 +105,49 @@
                   <el-icon><VideoPlay /></el-icon>
                   <span>运行</span>
                 </el-button>
-                <el-button
-                  type="info"
-                  size="small"
-                  @click="handleOpenQuery(index)"
-                  :disabled="step.running"
-                >
-                  <el-icon><Search /></el-icon>
-                  <span>查询参数</span>
-                </el-button>
               </el-form-item>
             </div>
 
-            <!-- instanceJson编辑框 -->
-            <el-form-item label="实例参数" class="json-editor">
-              <el-input 
-                v-model="step.params" 
-                type="textarea" 
-                :rows="4"
-                placeholder="请输入实例参数(JSON格式)"
-                :disabled="!canEditStep(step)"
-              />
-            </el-form-item>
+            <!-- 实例参数 / 查询参数 选项卡 -->
+            <el-tabs v-model="step.activeTab" class="param-tabs">
+              <!-- 实例参数：instanceJson 编辑框 -->
+              <el-tab-pane label="实例参数" name="params">
+                <el-input
+                  v-model="step.params"
+                  type="textarea"
+                  :rows="6"
+                  placeholder="请输入实例参数(JSON格式)"
+                  :disabled="!canEditStep(step)"
+                />
+              </el-tab-pane>
+
+              <!-- 查询参数：在响应中按 key 查询 value -->
+              <el-tab-pane label="查询参数" name="query">
+                <div class="query-pane">
+                  <div class="query-input-row">
+                    <el-input
+                      v-model="step.queryKey"
+                      placeholder="输入要查询的key，多个用、分割，如 token、data.id"
+                      clearable
+                      @keyup.enter="handleQueryParam(index)"
+                    />
+                    <el-button type="primary" @click="handleQueryParam(index)">
+                      <el-icon><Search /></el-icon>
+                      <span>查询</span>
+                    </el-button>
+                  </div>
+                  <div v-if="step.queryResult" class="query-result">
+                    <div class="response-label">查询结果：</div>
+                    <pre class="json-content">{{ step.queryResult }}</pre>
+                  </div>
+                  <el-empty
+                    v-else
+                    :image-size="60"
+                    description="运行步骤后，输入 key 查询响应参数"
+                  />
+                </div>
+              </el-tab-pane>
+            </el-tabs>
 
             <!-- 结果展示区域 -->
             <div v-if="step.result" class="result-section">
@@ -208,30 +229,6 @@
       </el-form-item>
     </common-dialog>
 
-    <!-- 查询参数弹窗 -->
-    <el-dialog v-model="queryDialogVisible" title="查询参数" width="600px">
-      <el-form label-width="80px">
-        <el-form-item label="参数Key">
-          <el-input
-            v-model="queryKey"
-            placeholder="请输入要查询的key（支持嵌套，如 data.token）"
-            clearable
-            @keyup.enter="handleQueryParam"
-          />
-        </el-form-item>
-      </el-form>
-      <div v-if="queryResult !== null" class="query-result">
-        <div class="response-label">查询结果：</div>
-        <pre class="json-content">{{ queryResult }}</pre>
-      </div>
-      <template #footer>
-        <el-button @click="queryDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleQueryParam">
-          <el-icon><Search /></el-icon>
-          <span>查询</span>
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -246,6 +243,7 @@ import * as flowStepApi from '@/api/api/api-flow-step'
 import * as apiApi from '@/api/api/api'
 import * as testcaseApi from '@/api/api/api-testcase'
 import * as apiResultApi from '@/api/api/api-result'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const route = useRoute()
 const router = useRouter()
@@ -263,12 +261,6 @@ const apiList = ref([])
 
 // 每个步骤的实例选项缓存
 const instanceOptionsCache = ref({})
-
-// 查询参数弹窗
-const queryDialogVisible = ref(false)
-const queryKey = ref('')
-const queryResult = ref(null)
-const queryStepIndex = ref(null)
 
 // 运行流程加载状态
 const runFlowLoading = ref(false)
@@ -310,7 +302,10 @@ const loadSteps = async () => {
       steps.value = res.data.map(step => ({
         ...step,
         running: false,
-        result: null
+        result: null,
+        activeTab: 'params',
+        queryKey: '',
+        queryResult: ''
       }))
     }
   } catch (error) {
@@ -433,68 +428,69 @@ const getCodeType = (code) => {
   return 'info'
 }
 
-// 在嵌套对象/数组中按 key 查找对应的 value
-// 支持点路径（如 data.token）；否则做深度优先搜索，返回第一个匹配项
-const findValueByKey = (obj, key) => {
-  // 1. 点路径优先精确匹配
+// 在嵌套对象/数组中按 key 查找对应的「所有」value
+// 支持点路径（如 data.token）做精确匹配；否则深度优先收集所有同名 key 的值
+const findAllValuesByKey = (obj, key) => {
+  const results = []
+
+  // 1. 点路径：精确定位，命中即返回该值
   if (key.includes('.')) {
     let cur = obj
+    let ok = true
     for (const part of key.split('.')) {
       if (cur && typeof cur === 'object' && part in cur) {
         cur = cur[part]
       } else {
-        cur = undefined
+        ok = false
         break
       }
     }
-    if (cur !== undefined) return cur
+    if (ok && cur !== undefined) results.push(cur)
+    return results
   }
-  // 2. 深度优先搜索第一个匹配的 key
+
+  // 2. 深度优先收集「所有」匹配的 key（含嵌套同名）
   const search = (node) => {
     if (Array.isArray(node)) {
-      for (const item of node) {
-        const r = search(item)
-        if (r !== undefined) return r
-      }
+      node.forEach(search)
     } else if (node && typeof node === 'object') {
-      if (Object.prototype.hasOwnProperty.call(node, key)) {
-        return node[key]
-      }
       for (const k of Object.keys(node)) {
-        const r = search(node[k])
-        if (r !== undefined) return r
+        if (k === key) results.push(node[k])
+        search(node[k])
       }
     }
-    return undefined
   }
-  return search(obj)
+  search(obj)
+  return results
 }
 
-// 打开查询参数弹窗
-const handleOpenQuery = (index) => {
+// 把单个 value 格式化为一行展示（对象/数组压成紧凑 JSON）
+const stringifyValue = (val) => {
+  if (val === null) return 'null'
+  if (typeof val === 'object') {
+    try {
+      return JSON.stringify(val)
+    } catch (e) {
+      return String(val)
+    }
+  }
+  return String(val)
+}
+
+// 在 responseInfo 中查询一个或多个 key 的 value
+// - 多个 key 用「、」分割
+// - 每个 key 的「所有」匹配值各占一行，格式为 key:value
+const handleQueryParam = (index) => {
   const step = steps.value[index]
-  if (!step.result || !step.result.responseInfo) {
-    ElMessage.warning('请先运行该步骤以获取响应数据')
-    return
-  }
-  queryStepIndex.value = index
-  queryKey.value = ''
-  queryResult.value = null
-  queryDialogVisible.value = true
-}
-
-// 在 responseInfo 中查询指定 key 的 value
-const handleQueryParam = () => {
-  const key = queryKey.value.trim()
-  if (!key) {
+  const input = (step.queryKey || '').trim()
+  if (!input) {
     ElMessage.warning('请输入要查询的key')
     return
   }
 
-  const step = steps.value[queryStepIndex.value]
   const responseInfo = step?.result?.responseInfo
   if (!responseInfo) {
-    ElMessage.warning('当前步骤暂无响应数据')
+    ElMessage.warning('请先运行该步骤以获取响应数据')
     return
   }
 
@@ -506,16 +502,26 @@ const handleQueryParam = () => {
     return
   }
 
-  const found = findValueByKey(data, key)
-  if (found === undefined) {
-    queryResult.value = null
-    ElMessage.warning(`未在响应中找到 key 为 "${key}" 的值`)
-    return
+  const keys = input.split('、').map(k => k.trim()).filter(Boolean)
+  const lines = []
+  let anyFound = false
+
+  for (const key of keys) {
+    const values = findAllValuesByKey(data, key)
+    if (values.length === 0) {
+      lines.push(`${key}:未找到`)
+    } else {
+      anyFound = true
+      for (const v of values) {
+        lines.push(`${key}:${stringifyValue(v)}`)
+      }
+    }
   }
 
-  queryResult.value = typeof found === 'object'
-    ? JSON.stringify(found, null, 2)
-    : String(found)
+  step.queryResult = lines.join('\n')
+  if (!anyFound) {
+    ElMessage.warning('未在响应中找到对应的值')
+  }
 }
 
 // 运行单个步骤
@@ -549,11 +555,12 @@ const handleRunStep = async (index) => {
     
     // 获取最新结果
     const res = await apiResultApi.getLatestResultByInstanceId(step.instanceId)
-    if (res.success && res.data) {
-      step.result = res.data
-      ElMessage.success('运行成功')
-    } else {
-      ElMessage.warning('未获取到运行结果')
+    if (handleApiResponse(res, '运行成功', '运行失败')) {
+      if (res.data) {
+        step.result = res.data
+      } else {
+        ElMessage.warning('未获取到运行结果')
+      }
     }
   } catch (error) {
     console.error('运行失败:', error)
@@ -647,12 +654,13 @@ const handleAddStepSubmit = async () => {
       flowType: 1
     }
     
-    await flowStepApi.addFlowStep(stepData)
-    ElMessage.success('添加成功')
-    addStepDialogVisible.value = false
-    
-    // 重新加载步骤列表
-    await loadSteps()
+    const res = await flowStepApi.addFlowStep(stepData)
+    if (handleApiResponse(res, '添加成功', '添加失败')) {
+      addStepDialogVisible.value = false
+
+      // 重新加载步骤列表
+      await loadSteps()
+    }
   } catch (error) {
     console.error('添加失败:', error)
     ElMessage.error('添加失败')
@@ -672,11 +680,14 @@ const handleDeleteStep = (index) => {
   }).then(async () => {
     try {
       if (step.stepId) {
-        await flowStepApi.deleteFlowStep(step.stepId)
+        const res = await flowStepApi.deleteFlowStep(step.stepId)
+        if (handleApiResponse(res, '删除成功', '删除失败')) {
+          steps.value.splice(index, 1)
+        }
+      } else {
+        steps.value.splice(index, 1)
+        ElMessage.success('删除成功')
       }
-      
-      steps.value.splice(index, 1)
-      ElMessage.success('删除成功')
     } catch (error) {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
@@ -797,19 +808,26 @@ onMounted(async () => {
   margin-right: 0;
 }
 
-.json-editor {
+/* 实例参数 / 查询参数 选项卡 */
+.param-tabs {
   margin-bottom: 15px;
 }
 
-.json-editor :deep(.el-form-item__label) {
-  width: 80px;
-}
-
 /* 实例参数JSON：等宽字体便于阅读对齐 */
-.json-editor :deep(.el-textarea__inner) {
+.param-tabs :deep(.el-textarea__inner) {
   font-family: 'Courier New', Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.query-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.query-result {
+  margin-top: 12px;
 }
 
 .result-section {

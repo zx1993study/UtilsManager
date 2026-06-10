@@ -23,8 +23,9 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import * as reportApiApi from '@/api/report/report-api'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 
@@ -69,9 +70,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await reportApiApi.deleteReportApi(row.id)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await reportApiApi.deleteReportApi(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -86,9 +88,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.id)
-      await reportApiApi.batchDeleteReportApi(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await reportApiApi.batchDeleteReportApi(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }

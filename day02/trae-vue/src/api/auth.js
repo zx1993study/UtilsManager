@@ -7,7 +7,7 @@ import request from '@/utils/request'
 // 用户登录
 export function login(data) {
   return request({
-    url: '/auth/login',
+    url: '/api/v1/auth/login',
     method: 'post',
     data
   })
@@ -16,7 +16,7 @@ export function login(data) {
 // 用户登出
 export function logout() {
   return request({
-    url: '/auth/logout',
+    url: '/api/v1/auth/logout',
     method: 'post'
   })
 }
@@ -24,7 +24,7 @@ export function logout() {
 // 获取用户信息
 export function getUserInfo() {
   return request({
-    url: '/auth/info',
+    url: '/api/v1/auth/info',
     method: 'get'
   })
 }
@@ -32,7 +32,7 @@ export function getUserInfo() {
 // 刷新Token
 export function refreshToken() {
   return request({
-    url: '/auth/refresh',
+    url: '/api/v1/auth/refresh',
     method: 'post'
   })
 }
@@ -40,7 +40,7 @@ export function refreshToken() {
 // 修改密码
 export function changePassword(data) {
   return request({
-    url: '/auth/change-password',
+    url: '/api/v1/auth/change-password',
     method: 'put',
     data
   })

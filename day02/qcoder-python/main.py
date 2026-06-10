@@ -13,6 +13,41 @@ from core.logger import logger
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
 
+
+def _seed_default_users():
+    """首次启动时幂等播种默认账号，保证登录开箱可用。
+
+    仅当 sys_user 表为空时写入：admin/admin123、test_user/test123（密码 bcrypt 存储）。
+    任何异常都不应阻断应用启动。
+    """
+    try:
+        from datetime import datetime
+        from core.db import SessionLocal
+        from models.sys_user_model import SysUser
+        from core.jwt import get_password_hash
+
+        db = SessionLocal()
+        try:
+            if db.query(SysUser).count() == 0:
+                now = datetime.now()
+                db.add_all([
+                    SysUser(username="admin", password=get_password_hash("admin123"),
+                            nickname="管理员", status=1, creator="system",
+                            create_time=now, update_time=now),
+                    SysUser(username="test_user", password=get_password_hash("test123"),
+                            nickname="测试用户", status=1, creator="system",
+                            create_time=now, update_time=now),
+                ])
+                db.commit()
+                logger.info("已播种默认账号：admin / test_user")
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"默认账号播种跳过：{exc}")
+
+
+_seed_default_users()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时执行

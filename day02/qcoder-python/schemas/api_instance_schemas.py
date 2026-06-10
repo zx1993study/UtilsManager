@@ -58,6 +58,11 @@ class ApiInstanceInfo(ApiInstanceBase):
     creator: Optional[str] = Field(None, description="创建人")
     create_time: Optional[datetime] = Field(None, description="创建时间")
     update_time: Optional[datetime] = Field(None, description="更新时间")
+    project_id: Optional[int] = Field(None, description="项目id")
+    project_name: Optional[str] = Field(None, description="项目名称")
+    project_address: Optional[str] = Field(None, description="项目地址")
+    api_name: Optional[str] = Field(None, description="接口名称")
+    method_url: Optional[str] = Field(None, description="接口URL")
 
     @field_serializer('create_time', 'update_time')
     def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:

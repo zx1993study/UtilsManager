@@ -18,7 +18,7 @@
           <!-- 无子菜单或只有一个子菜单项（显示为一级菜单） -->
           <el-menu-item 
             v-if="!route.children || route.children.length === 0 || (route.children && route.children.length === 1)" 
-            :index="route.children && route.children.length === 1 ? route.children[0].path : route.path"
+            :index="route.children && route.children.length === 1 && route.children[0].path ? route.children[0].path : route.path"
           >
             <el-icon><component :is="route.meta?.icon || 'Menu'" /></el-icon>
             <template #title>{{ route.meta?.title }}</template>
@@ -87,9 +87,9 @@
 
       <!-- 主要内容区 -->
       <el-main class="main-content">
-        <router-view v-slot="{ Component }">
-          <transition name="fade-transform" mode="out-in">
-            <component :is="Component" />
+        <router-view v-slot="{ Component, route }">
+          <transition name="fade-transform" mode="out-in" appear>
+            <component :is="Component" :key="route.path" />
           </transition>
         </router-view>
       </el-main>

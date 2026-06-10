@@ -35,6 +35,10 @@ class ApiResultCreate(ApiResultBase):
 class ApiResultUpdate(ApiResultBase):
     """API结果更新Schema"""
     result_id: int = Field(..., description="接口结果id")
+
+class ApiResultBatchDelete(BaseModel):
+    """API结果批量删除Schema"""
+    ids: list[int] = Field(..., description="接口结果id列表")
     
 class ApiResultList(ApiResultBase):
     """条件查询条件Schema"""

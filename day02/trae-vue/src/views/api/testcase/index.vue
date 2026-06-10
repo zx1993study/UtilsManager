@@ -94,6 +94,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as projectApi from '@/api/project/project'
 import * as apiListApi from '@/api/api/api'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -105,8 +106,11 @@ const apiOptions = ref([])
 // 列配置
 const columns = [
   { prop: 'instanceName', label: '用例名称', minWidth: 150 },
-  { prop: 'description', label: '描述', minWidth: 200, showOverflowTooltip: true },
   { prop: 'expectResult', label: '期望结果', minWidth: 150 },
+  { prop: 'apiName', label: 'API名称', minWidth: 150 },
+  { prop: 'methodUrl', label: 'API路径', minWidth: 200, showOverflowTooltip: true },
+  { prop:'projectName', label:'项目名称', minWidth: 150},
+  { prop: 'description', label: '描述', minWidth: 200, showOverflowTooltip: true },
   { prop: 'remark', label: '备注', minWidth: 200, showOverflowTooltip: true },
   {
     prop: 'status',
@@ -252,9 +256,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiTestcaseApi.deleteTestcase(row.instanceId)
-      ElMessage.success('删除成功')
-      tableRef.value.refresh()
+      const res = await apiTestcaseApi.deleteTestcase(row.instanceId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
@@ -276,9 +281,10 @@ const handleBatchDelete = (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(item => item.instanceId)
-      await apiTestcaseApi.batchDeleteTestcase(ids)
-      ElMessage.success('删除成功')
-      tableRef.value.refresh()
+      const res = await apiTestcaseApi.batchDeleteTestcase(ids)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
@@ -292,15 +298,16 @@ const handleBatchDelete = (rows) => {
 const handleSubmit = async () => {
   try {
     submitLoading.value = true
+    let res
     if (isEdit.value) {
-      await apiTestcaseApi.updateTestcase(formData)
-      ElMessage.success('更新成功')
+      res = await apiTestcaseApi.updateTestcase(formData)
     } else {
-      await apiTestcaseApi.addTestcase(formData)
-      ElMessage.success('添加成功')
+      res = await apiTestcaseApi.addTestcase(formData)
     }
-    dialogVisible.value = false
-    tableRef.value.refresh()
+    if (handleApiResponse(res, isEdit.value ? '更新成功' : '添加成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value.refresh()
+    }
   } catch (error) {
     console.error('提交失败:', error)
     ElMessage.error('提交失败')

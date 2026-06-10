@@ -141,6 +141,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as apiTemplateApi from '@/api/api/api-template'
 import * as projectApi from '@/api/project/project'
 import * as apiListApi from '@/api/api/api'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -292,9 +293,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiTemplateApi.deleteTemplate(row.templateId)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await apiTemplateApi.deleteTemplate(row.templateId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -309,9 +311,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.templateId)
-      await apiTemplateApi.batchDeleteTemplate(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await apiTemplateApi.batchDeleteTemplate(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -321,15 +324,16 @@ const handleBatchDelete = async (rows) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
+    let res
     if (formData.templateId) {
-      await apiTemplateApi.updateTemplate(formData)
-      ElMessage.success('编辑成功')
+      res = await apiTemplateApi.updateTemplate(formData)
     } else {
-      await apiTemplateApi.addTemplate(formData)
-      ElMessage.success('新增成功')
+      res = await apiTemplateApi.addTemplate(formData)
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
+    if (handleApiResponse(res, formData.templateId ? '编辑成功' : '新增成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
+    }
   } catch (error) {
     console.error('提交失败:', error)
   } finally {

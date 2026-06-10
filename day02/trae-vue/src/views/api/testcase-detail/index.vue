@@ -357,6 +357,7 @@ import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as apiApi from '@/api/api/api'
 import * as apiTemplateApi from '@/api/api/api-template'
 import * as apiResultApi from '@/api/api/api-result'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const route = useRoute()
 const router = useRouter()
@@ -694,19 +695,20 @@ const handleRunTestcase = (row) => {
     type: 'info'
   }).then(async () => {
     try {
-      await apiTestcaseApi.executeTestcase(row.instanceId)
-      ElMessage.success('运行成功')
-      tableRef.value.refresh()
-      loadStatistics()
-      
-      // 如果当前选中的实例ID与运行的实例ID相同，刷新结果详情
-      if (selectedInstanceId.value === row.instanceId) {
-        await loadLatestResultByInstanceId(row.instanceId)
-      }
-      
-      // 如果在结果详情选项卡，且当前API与运行的用例所属API相同，刷新最新结果
-      if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
-        await loadLatestResultByApiId(selectedApiId.value)
+      const res = await apiTestcaseApi.executeTestcase(row.instanceId)
+      if (handleApiResponse(res, '运行成功', '运行失败')) {
+        tableRef.value.refresh()
+        loadStatistics()
+
+        // 如果当前选中的实例ID与运行的实例ID相同，刷新结果详情
+        if (selectedInstanceId.value === row.instanceId) {
+          await loadLatestResultByInstanceId(row.instanceId)
+        }
+
+        // 如果在结果详情选项卡，且当前API与运行的用例所属API相同，刷新最新结果
+        if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
+          await loadLatestResultByApiId(selectedApiId.value)
+        }
       }
     } catch (error) {
       console.error('运行失败:', error)
@@ -733,16 +735,17 @@ const handleBatchRun = () => {
     try {
       const ids = selectedRows.value.map(item => item.instanceId)
       console.log('发送批量运行请求，IDs:', ids)
-      await apiTestcaseApi.batchExecuteTestcase(ids)
-      ElMessage.success('批量运行成功')
-      tableRef.value.refresh()
-      loadStatistics()
-      // 清空选择
-      tableRef.value.clearSelection()
-      
-      // 刷新当前API的最新结果
-      if (selectedApiId.value) {
-        await loadLatestResultByApiId(selectedApiId.value)
+      const res = await apiTestcaseApi.batchExecuteTestcase(ids)
+      if (handleApiResponse(res, '批量运行成功', '批量运行失败')) {
+        tableRef.value.refresh()
+        loadStatistics()
+        // 清空选择
+        tableRef.value.clearSelection()
+
+        // 刷新当前API的最新结果
+        if (selectedApiId.value) {
+          await loadLatestResultByApiId(selectedApiId.value)
+        }
       }
     } catch (error) {
       console.error('批量运行失败:', error)
@@ -771,19 +774,20 @@ const handleCopyTestcase = (row) => {
 const handleCopySubmit = async () => {
   try {
     copySubmitLoading.value = true
-    await apiTestcaseApi.addTestcase(copyFormData)
-    ElMessage.success('复制成功')
-    copyDialogVisible.value = false
-    tableRef.value.refresh()
-    loadStatistics()
-    
-    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
-    await nextTick()
-    setTimeout(async () => {
-      if (selectedApiId.value) {
-        await loadInstanceList(selectedApiId.value, true)
-      }
-    }, 300)
+    const res = await apiTestcaseApi.addTestcase(copyFormData)
+    if (handleApiResponse(res, '复制成功', '复制失败')) {
+      copyDialogVisible.value = false
+      tableRef.value.refresh()
+      loadStatistics()
+
+      // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+      await nextTick()
+      setTimeout(async () => {
+        if (selectedApiId.value) {
+          await loadInstanceList(selectedApiId.value, true)
+        }
+      }, 300)
+    }
   } catch (error) {
     console.error('复制失败:', error)
     ElMessage.error('复制失败')
@@ -796,24 +800,25 @@ const handleCopySubmit = async () => {
 const handleSubmit = async () => {
   try {
     submitLoading.value = true
+    let res
     if (isEdit.value) {
-      await apiTestcaseApi.updateTestcase(formData)
-      ElMessage.success('更新成功')
+      res = await apiTestcaseApi.updateTestcase(formData)
     } else {
-      await apiTestcaseApi.addTestcase(formData)
-      ElMessage.success('添加成功')
+      res = await apiTestcaseApi.addTestcase(formData)
     }
-    dialogVisible.value = false
-    tableRef.value.refresh()
-    loadStatistics()
-    
-    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
-    await nextTick()
-    setTimeout(async () => {
-      if (selectedApiId.value) {
-        await loadInstanceList(selectedApiId.value, true)
-      }
-    }, 300)
+    if (handleApiResponse(res, isEdit.value ? '更新成功' : '添加成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value.refresh()
+      loadStatistics()
+
+      // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+      await nextTick()
+      setTimeout(async () => {
+        if (selectedApiId.value) {
+          await loadInstanceList(selectedApiId.value, true)
+        }
+      }, 300)
+    }
   } catch (error) {
     console.error('提交失败:', error)
     ElMessage.error('提交失败')
@@ -835,18 +840,19 @@ const handleDeleteTestcase = async (row) => {
       }
     )
     
-    await apiTestcaseApi.deleteTestcase(row.instanceId)
-    ElMessage.success('删除成功')
-    tableRef.value.refresh()
-    loadStatistics()
-    
-    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
-    await nextTick()
-    setTimeout(async () => {
-      if (selectedApiId.value) {
-        await loadInstanceList(selectedApiId.value, true)
-      }
-    }, 300)
+    const res = await apiTestcaseApi.deleteTestcase(row.instanceId)
+    if (handleApiResponse(res, '删除成功', '删除失败')) {
+      tableRef.value.refresh()
+      loadStatistics()
+
+      // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+      await nextTick()
+      setTimeout(async () => {
+        if (selectedApiId.value) {
+          await loadInstanceList(selectedApiId.value, true)
+        }
+      }, 300)
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
@@ -878,20 +884,21 @@ const handleBatchDeleteTestcase = async () => {
     
     const ids = selectedRows.value.map(item => item.instanceId)
     console.log('发送批量删除请求，IDs:', ids)
-    await apiTestcaseApi.batchDeleteTestcase(ids)
-    ElMessage.success('批量删除成功')
-    tableRef.value.refresh()
-    loadStatistics()
-    // 清空选择
-    tableRef.value.clearSelection()
-    
-    // 延迟刷新左侧API实例列表，避免与表格刷新冲突
-    await nextTick()
-    setTimeout(async () => {
-      if (selectedApiId.value) {
-        await loadInstanceList(selectedApiId.value, true)
-      }
-    }, 300)
+    const res = await apiTestcaseApi.batchDeleteTestcase(ids)
+    if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+      tableRef.value.refresh()
+      loadStatistics()
+      // 清空选择
+      tableRef.value.clearSelection()
+
+      // 延迟刷新左侧API实例列表，避免与表格刷新冲突
+      await nextTick()
+      setTimeout(async () => {
+        if (selectedApiId.value) {
+          await loadInstanceList(selectedApiId.value, true)
+        }
+      }, 300)
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('批量删除失败:', error)
@@ -946,9 +953,10 @@ const handleDeleteTemplate = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await apiTemplateApi.deleteTemplate(row.templateId)
-      ElMessage.success('删除成功')
-      loadTemplateList()
+      const res = await apiTemplateApi.deleteTemplate(row.templateId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        loadTemplateList()
+      }
     } catch (error) {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
@@ -960,15 +968,16 @@ const handleDeleteTemplate = (row) => {
 const handleTemplateSubmit = async () => {
   try {
     templateSubmitLoading.value = true
+    let res
     if (templateFormData.templateId) {
-      await apiTemplateApi.updateTemplate(templateFormData)
-      ElMessage.success('更新成功')
+      res = await apiTemplateApi.updateTemplate(templateFormData)
     } else {
-      await apiTemplateApi.addTemplate(templateFormData)
-      ElMessage.success('新增成功')
+      res = await apiTemplateApi.addTemplate(templateFormData)
     }
-    templateDialogVisible.value = false
-    loadTemplateList()
+    if (handleApiResponse(res, templateFormData.templateId ? '更新成功' : '新增成功', '提交失败')) {
+      templateDialogVisible.value = false
+      loadTemplateList()
+    }
   } catch (error) {
     console.error('提交失败:', error)
     ElMessage.error('提交失败')

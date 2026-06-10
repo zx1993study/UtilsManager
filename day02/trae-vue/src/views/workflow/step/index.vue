@@ -39,6 +39,7 @@ import { ref, reactive } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { handleApiResponse } from '@/utils/responseHandler'
 import * as workflowStepApi from '@/api/workflow/workflow-step'
 
 const tableRef = ref(null)
@@ -93,9 +94,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await workflowStepApi.deleteWorkflowStep(row.id)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await workflowStepApi.deleteWorkflowStep(row.id)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -110,9 +112,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.id)
-      await workflowStepApi.batchDeleteWorkflowStep(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await workflowStepApi.batchDeleteWorkflowStep(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -122,15 +125,13 @@ const handleBatchDelete = async (rows) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
-    if (formData.id) {
-      await workflowStepApi.updateWorkflowStep(formData)
-      ElMessage.success('编辑成功')
-    } else {
-      await workflowStepApi.addWorkflowStep(formData)
-      ElMessage.success('新增成功')
+    const res = formData.id
+      ? await workflowStepApi.updateWorkflowStep(formData)
+      : await workflowStepApi.addWorkflowStep(formData)
+    if (handleApiResponse(res, formData.id ? '编辑成功' : '新增成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
   } catch (error) {
     console.error('提交失败:', error)
   } finally {

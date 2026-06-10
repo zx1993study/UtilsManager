@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/layout/index.vue'
+import { useUserStore } from '@/stores/user'
+import { getUserInfo } from '@/api/auth'
 
 const routes = [
   {
@@ -20,9 +22,11 @@ const routes = [
     meta: { title: '仪表盘', icon: 'Odometer' },
     children: [
       {
-        path: '/dashboard',
+        // 空 path 作为 /dashboard 的默认子路由，避免与父路由同名（消除 vue-router 重复路径告警）
+        path: '',
         name: 'Dashboard',
-        component: () => import('@/views/dashboard/index.vue')
+        component: () => import('@/views/dashboard/index.vue'),
+        meta: { title: '仪表盘', icon: 'Odometer' }
       }
     ]
   },
@@ -231,25 +235,43 @@ const router = createRouter({
   routes
 })
 
+// 本次会话是否已向后端校验过 token（避免每次导航都请求）
+let tokenValidated = false
+
 // 路由守卫
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-  
-  if (to.path === '/login') {
-    // 如果已登录，访问登录页时重定向到仪表盘
-    if (token) {
-      next('/dashboard')
-    } else {
-      next()
-    }
-  } else {
-    // 访问其他页面，需要登录
-    if (token) {
-      next()
-    } else {
-      next('/login')
+router.beforeEach(async (to, from, next) => {
+  const userStore = useUserStore()
+  const token = userStore.token || localStorage.getItem('token')
+
+  // 未登录：只放行登录页，其余一律去登录
+  if (!token) {
+    tokenValidated = false
+    return to.path === '/login' ? next() : next('/login')
+  }
+
+  // 有 token：首屏向后端校验一次，过滤掉残留/伪造/过期的 token
+  if (!tokenValidated) {
+    tokenValidated = true
+    try {
+      const res = await getUserInfo()
+      if (res && res.success) {
+        userStore.setUserInfo(res.data)
+      } else {
+        userStore.logout()
+        return next('/login')
+      }
+    } catch (error) {
+      // 401/网络异常等：清登录态，回登录页
+      userStore.logout()
+      return next('/login')
     }
   }
+
+  // 已登录且校验通过：访问登录页时跳回仪表盘
+  if (to.path === '/login') {
+    return next('/dashboard')
+  }
+  next()
 })
 
 export default router

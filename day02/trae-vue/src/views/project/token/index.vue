@@ -135,6 +135,7 @@ import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import { handleApiResponse } from '@/utils/responseHandler'
 import * as tokenApi from '@/api/project/token'
 import * as projectApi from '@/api/project/project'
 import * as apiApi from '@/api/api/api'
@@ -298,9 +299,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await tokenApi.deleteToken(row.tokenId)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh()
+      const res = await tokenApi.deleteToken(row.tokenId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -316,9 +318,10 @@ const handleBatchDelete = async (rows) => {
   }).then(async () => {
     try {
       const ids = rows.map(row => row.tokenId)
-      await tokenApi.batchDeleteToken(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh()
+      const res = await tokenApi.batchDeleteToken(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -333,9 +336,10 @@ const handleRefreshToken = (row) => {
     type: 'info'
   }).then(async () => {
     try {
-      await tokenApi.refreshToken(row.tokenId)
-      ElMessage.success('刷新成功')
-      tableRef.value?.refresh()
+      const res = await tokenApi.refreshToken(row.tokenId)
+      if (handleApiResponse(res, '刷新成功', '刷新失败')) {
+        tableRef.value?.refresh()
+      }
     } catch (error) {
       console.error('刷新失败:', error)
       ElMessage.error('刷新失败')
@@ -357,11 +361,12 @@ const handleBatchRefresh = () => {
   }).then(async () => {
     try {
       const ids = selectedRows.value.map(row => row.tokenId)
-      await tokenApi.batchRefreshToken(ids)
-      ElMessage.success('批量刷新成功')
-      tableRef.value?.refresh()
-      // 清空选择
-      tableRef.value.clearSelection()
+      const res = await tokenApi.batchRefreshToken(ids)
+      if (handleApiResponse(res, '批量刷新成功', '批量刷新失败')) {
+        tableRef.value?.refresh()
+        // 清空选择
+        tableRef.value.clearSelection()
+      }
     } catch (error) {
       console.error('批量刷新失败:', error)
       ElMessage.error('批量刷新失败')
@@ -373,15 +378,13 @@ const handleBatchRefresh = () => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
-    if (formData.tokenId) {
-      await tokenApi.updateToken(formData)
-      ElMessage.success('编辑成功')
-    } else {
-      await tokenApi.addToken(formData)
-      ElMessage.success('新增成功')
+    const res = formData.tokenId
+      ? await tokenApi.updateToken(formData)
+      : await tokenApi.addToken(formData)
+    if (handleApiResponse(res, formData.tokenId ? '编辑成功' : '新增成功', '提交失败')) {
+      dialogVisible.value = false
+      tableRef.value?.refresh()
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh()
   } catch (error) {
     console.error('提交失败:', error)
   } finally {

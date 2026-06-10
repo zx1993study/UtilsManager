@@ -6,7 +6,8 @@
       :api-method="userApi.getUserList"
       :pagination="pagination"
       :search-fields="searchFields"
-      show-selection
+      :show-selection="true"
+      row-key="userId"
       show-copy
       @add="handleAdd"
       @edit="handleEdit"
@@ -49,32 +50,12 @@
         <el-input v-model="formData.username" placeholder="请输入用户名" />
       </el-form-item>
       
-      <el-form-item label="姓名" prop="realName">
-        <el-input v-model="formData.realName" placeholder="请输入姓名" />
+      <el-form-item label="昵称" prop="nickname">
+        <el-input v-model="formData.nickname" placeholder="请输入昵称" />
       </el-form-item>
       
-      <el-form-item label="邮箱" prop="email">
-        <el-input v-model="formData.email" placeholder="请输入邮箱" />
-      </el-form-item>
-      
-      <el-form-item label="手机号" prop="phone">
-        <el-input v-model="formData.phone" placeholder="请输入手机号" />
-      </el-form-item>
-      
-      <el-form-item label="部门" prop="deptId">
-        <el-select filterable v-model="formData.deptId" placeholder="请选择部门" style="width: 100%">
-          <el-option label="技术部" value="1" />
-          <el-option label="产品部" value="2" />
-          <el-option label="运营部" value="3" />
-        </el-select>
-      </el-form-item>
-      
-      <el-form-item label="角色" prop="roleIds">
-        <el-select filterable v-model="formData.roleIds" multiple placeholder="请选择角色" style="width: 100%">
-          <el-option label="管理员" value="1" />
-          <el-option label="普通用户" value="2" />
-          <el-option label="访客" value="3" />
-        </el-select>
+      <el-form-item label="密码" prop="password">
+        <el-input v-model="formData.password" placeholder="请输入密码" />
       </el-form-item>
       
       <el-form-item label="状态" prop="status">
@@ -94,6 +75,7 @@ import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Key } from '@element-plus/icons-vue'
 import * as userApi from '@/api/system/user'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -104,11 +86,7 @@ const tableData = ref([])
 // 列配置
 const columns = [
   { prop: 'username', label: '用户名', width: 120 },
-  { prop: 'realName', label: '姓名', width: 120 },
-  { prop: 'email', label: '邮箱', minWidth: 180 },
-  { prop: 'phone', label: '手机号', width: 130 },
-  { prop: 'deptName', label: '部门', width: 120 },
-  { prop: 'roleName', label: '角色', width: 120 },
+  { prop: 'nickname', label: '昵称', width: 120 },
   { prop: 'status', label: '状态', width: 80, slot: 'status' },
   { prop: 'createTime', label: '创建时间', width: 180 }
 ]
@@ -116,7 +94,7 @@ const columns = [
 // 搜索字段配置
 const searchFields = [
   { type: 'input', prop: 'username', label: '用户名', placeholder: '请输入用户名' },
-  { type: 'input', prop: 'realName', label: '姓名', placeholder: '请输入姓名' },
+  { type: 'input', prop: 'nickname', label: '昵称', placeholder: '请输入昵称' },
   { type: 'select', prop: 'status', label: '状态', placeholder: '请选择状态',
     options: [
       { label: '启用', value: 1 },
@@ -135,32 +113,28 @@ const pagination = reactive({
 // 弹窗配置
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
+// 弹窗操作模式：add 新增 / edit 编辑 / copy 复制（copy 与 add 一样走新增，避免误用更新接口）
+const dialogMode = ref('add')
 const formData = reactive({
-  id: null,
+  userId: null,
   username: '',
-  realName: '',
-  email: '',
-  phone: '',
-  deptId: '',
-  roleIds: [],
+  nickname: '',
+  password: '',
   status: 1
 })
 
 const formRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
-  ],
-  phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' },
-    { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
+  nickname: [{ required: true, message: '请输入昵称', trigger: 'blur' }],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 20, message: '密码长度必须在6-20个字符之间', trigger: 'blur' }
   ]
 }
 
 // 处理新增
 const handleAdd = () => {
+  dialogMode.value = 'add'
   dialogTitle.value = '新增用户'
   resetForm()
   dialogVisible.value = true
@@ -168,6 +142,7 @@ const handleAdd = () => {
 
 // 处理编辑
 const handleEdit = (row) => {
+  dialogMode.value = 'edit'
   dialogTitle.value = '编辑用户'
   Object.assign(formData, row)
   dialogVisible.value = true
@@ -175,9 +150,10 @@ const handleEdit = (row) => {
 
 // 处理复制
 const handleCopy = (row) => {
+  dialogMode.value = 'copy'
   dialogTitle.value = '复制用户'
   resetForm()
-  Object.assign(formData, { ...row, id: null })
+  Object.assign(formData, { ...row, userId: null })
   dialogVisible.value = true
   ElMessage.info('已复制用户信息，请修改后保存')
 }
@@ -190,9 +166,10 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await userApi.deleteUser(row.id)
-      ElMessage.success('删除成功')
-      tableRef.value?.refresh() // 刷新列表
+      const res = await userApi.deleteUser(row.userId)
+      if (handleApiResponse(res, '删除成功', '删除失败')) {
+        tableRef.value?.refresh() // 刷新列表
+      }
     } catch (error) {
       console.error('删除失败:', error)
     }
@@ -207,10 +184,11 @@ const handleBatchDelete = async (rows) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const ids = rows.map(row => row.id)
-      await userApi.batchDeleteUser(ids)
-      ElMessage.success('批量删除成功')
-      tableRef.value?.refresh() // 刷新列表
+      const ids = rows.map(row => row.userId)
+      const res = await userApi.batchDeleteUser(ids)
+      if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
+        tableRef.value?.refresh() // 刷新列表
+      }
     } catch (error) {
       console.error('批量删除失败:', error)
     }
@@ -226,8 +204,8 @@ const handleResetPassword = (row) => {
     inputErrorMessage: '密码长度必须在6-20位之间'
   }).then(async ({ value }) => {
     try {
-      await userApi.resetPassword(row.id, value)
-      ElMessage.success('密码重置成功')
+      const res = await userApi.resetPassword(row.userId, value)
+      handleApiResponse(res, '密码重置成功', '密码重置失败')
     } catch (error) {
       console.error('重置密码失败:', error)
     }
@@ -238,17 +216,24 @@ const handleResetPassword = (row) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
-    if (formData.id) {
-      // 编辑
-      await userApi.updateUser(formData)
-      ElMessage.success('编辑成功')
+    let res
+    let okMsg
+    let failMsg
+    if (dialogMode.value === 'edit') {
+      // 编辑：调用更新接口(PUT)
+      res = await userApi.updateUser(formData)
+      okMsg = '编辑成功'
+      failMsg = '编辑失败'
     } else {
-      // 新增
-      await userApi.addUser(formData)
-      ElMessage.success('新增成功')
+      // 新增 / 复制：均调用新增接口(POST)
+      res = await userApi.addUser(formData)
+      okMsg = dialogMode.value === 'copy' ? '复制成功' : '新增成功'
+      failMsg = dialogMode.value === 'copy' ? '复制失败' : '新增失败'
     }
-    dialogVisible.value = false
-    tableRef.value?.refresh() // 刷新列表
+    if (handleApiResponse(res, okMsg, failMsg)) {
+      dialogVisible.value = false
+      tableRef.value?.refresh() // 刷新列表
+    }
   } catch (error) {
     console.error('提交失败:', error)
   } finally {
@@ -259,13 +244,10 @@ const handleSubmit = async () => {
 // 重置表单
 const resetForm = () => {
   Object.assign(formData, {
-    id: null,
+    userId: null,
     username: '',
-    realName: '',
-    email: '',
-    phone: '',
-    deptId: '',
-    roleIds: [],
+    nickname: '',
+    password: '',
     status: 1
   })
 }

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from schemas.sys_user_schemas import SysUserCreate, SysUserUpdate, SysUserInfo
 from mysql.sys_user_sql import (
     get_sys_user_by_id,
-    get_sys_user_by_nickname,
+    get_sys_user_by_username,
     get_sys_user_list,
     create_sys_user,
     update_sys_user,
@@ -14,6 +14,7 @@ from mysql.sys_user_sql import (
 )
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
+from core.logger import logger
 
 
 async def get_sys_user_service(db: Session, item_id: int):
@@ -51,17 +52,17 @@ async def get_sys_user_list_service(db: Session, page_num: int = 1, page_size: i
 
 async def create_sys_user_service(db: Session, data: SysUserCreate):
     """创建系统用户"""
-    # 业务逻辑校验：检查是否存在相同的nickname
-    existing = await get_sys_user_by_nickname(
+    # 业务逻辑校验：检查是否存在相同的username
+    existing = await get_sys_user_by_username(
         db, 
-        nickname=data.nickname
+        username=data.username
     )
     
     if existing:
         return error_response(
             msg="添加失败，该用户已存在",
-            data=existing,
-            error=f'{{"errorCode": "DUPLICATE_USER", "message": "已存在昵称为\'{data.nickname}\'的用户"}}'
+            data=SysUserInfo.model_validate(existing),
+            error=f'{{"errorCode": "DUPLICATE_USER", "message": "已存在用户名为\'{data.username}\'的用户"}}'
         )
     
     obj = await create_sys_user(db, data.model_dump(by_alias=False))
@@ -81,6 +82,18 @@ async def update_sys_user_service(db: Session, item_id: int, data: SysUserUpdate
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "系统用户不存在"}'
         )
+      # 业务逻辑校验：检查是否存在相同的username
+    existing = await get_sys_user_by_username(
+        db, 
+        username=data.username
+    )
+    
+    if existing and existing.user_id != item_id:
+        return error_response(
+            msg="更新失败，该用户已存在",
+            data=SysUserInfo.model_validate(existing),
+            error=f'{{"errorCode": "DUPLICATE_USER", "message": "已存在用户名为\'{data.username}\'的用户"}}'
+        )
     
     obj = await update_sys_user(db, item_id, data.model_dump(by_alias=False, exclude_unset=True))
     
@@ -88,20 +101,32 @@ async def update_sys_user_service(db: Session, item_id: int, data: SysUserUpdate
     schema_obj = SysUserInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
-
-async def delete_sys_user_service(db: Session, item_id: int):
-    """删除系统用户"""
-    # 校验是否存在
-    existing = await get_sys_user_by_id(db, item_id)
-    if not existing:
+async def delete_sys_user_batch_service(db: Session, ids: list[int]):
+    """批量删除系统用户"""
+   
+    obj = await delete_sys_user(db, ids)         
+    
+    if not obj:
         return error_response(
             msg="删除失败，信息不存在",
             data=None,
-            error='{"errorCode": "NOT_FOUND", "message": "系统用户不存在"}'
+            error='{"errorCode": "NOT_FOUND", "message": "没有找到要删除的系统用户"}'
         )
     
-    obj = await delete_sys_user(db, item_id)
-    
+    return success_response(
+        msg="删除成功",
+        data={"deleted_ids": ids, "message": f"成功删除{obj}个系统用户"}
+    )
+
+async def delete_sys_user_service(db: Session, item_id: int):
+    """删除系统用户"""  
+    obj = await delete_sys_user(db, [item_id])
+    if not obj:
+        return error_response(
+            msg="删除失败，信息不存在",
+            data=None,
+            error='{"errorCode": "NOT_FOUND", "message": "没有找到要删除的系统用户"}'
+        )
     return success_response(
         msg="删除成功",
         data={"id": item_id, "message": "系统用户已删除"}

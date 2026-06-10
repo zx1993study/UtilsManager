@@ -49,7 +49,8 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { ElMessage } from 'element-plus'
+import { login as loginApi } from '@/api/auth'
+import { handleApiResponse } from '@/utils/responseHandler'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -59,7 +60,7 @@ const loading = ref(false)
 
 const loginForm = reactive({
   username: 'admin',
-  password: '123456'
+  password: 'admin123'
 })
 
 const loginRules = reactive({
@@ -80,20 +81,20 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true
       try {
-        // 模拟登录请求
-        const mockToken = 'mock-token-' + Date.now()
-        const mockUserInfo = {
+        // 调用后端真实登录接口
+        const res = await loginApi({
           username: loginForm.username,
-          avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+          password: loginForm.password
+        })
+
+        if (handleApiResponse(res, '登录成功', '用户名或密码错误')) {
+          userStore.setToken(res.data.token)
+          userStore.setUserInfo(res.data.userInfo)
+          router.push('/dashboard')
         }
-        
-        userStore.setToken(mockToken)
-        userStore.setUserInfo(mockUserInfo)
-        
-        ElMessage.success('登录成功')
-        router.push('/dashboard')
       } catch (error) {
-        ElMessage.error('登录失败')
+        // 网络/服务异常已由 request 拦截器提示，这里兜底
+        console.error('登录失败:', error)
       } finally {
         loading.value = false
       }

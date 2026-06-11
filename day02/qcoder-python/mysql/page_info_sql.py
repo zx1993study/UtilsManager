@@ -78,10 +78,9 @@ async def update_page_info(db: Session, page_id: int, data: dict) -> Optional[Pa
     return db_obj
 
 
-async def delete_page_info(db: Session, page_id: int) -> Optional[PageInfo]:
+async def delete_page_info(db: Session, page_ids: list[int]) -> Optional[PageInfo]:
     """删除页面信息"""
-    db_obj = db.query(PageInfo).filter(PageInfo.page_id == page_id).first()
+    db_obj = db.query(PageInfo).filter(PageInfo.page_id.in_(page_ids)).delete(synchronize_session=False)
     if db_obj:
-        db.delete(db_obj)
         db.commit()
     return db_obj

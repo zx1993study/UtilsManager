@@ -139,6 +139,7 @@ CREATE TABLE `page_info` (
   `description` TEXT COMMENT '描述',
   `project_id` BIGINT DEFAULT NULL COMMENT '项目id',
   `page_url` VARCHAR(500) DEFAULT NULL COMMENT 'URL',
+  `fileName` VARCHAR(50) DEFAULT NULL COMMENT '功能代码文件名称',
   `token_id` BIGINT DEFAULT NULL COMMENT 'tokenId',
   `function` TEXT COMMENT '功能',
   `remark` TEXT COMMENT '备注',

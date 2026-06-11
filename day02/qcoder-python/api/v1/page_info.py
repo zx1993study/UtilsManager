@@ -6,19 +6,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.page_info_schemas import PageInfoCreate, PageInfoUpdate, PageInfoInfo
+from schemas.page_info_schemas import PageInfoCreate, PageInfoUpdate, PageInfoInfo, PageInfoIds
 from service.page_info_service import (
     get_page_info_service,
     get_page_info_list_service,
     create_page_info_service,
     update_page_info_service,
-    delete_page_info_service
+    delete_page_info_service,
+    delete_page_info_batch_service
 )
 
-router = APIRouter(prefix="/ pageInfo", tags=["页面信息"])
+router = APIRouter()
 
 
-@router.get("/", response_model=dict)
+@router.get("/pageInfo", response_model=dict)
 async def list_page_info(
     page_num: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
@@ -28,7 +29,7 @@ async def list_page_info(
     return await get_page_info_list_service(db, page_num, page_size)
 
 
-@router.get("/{item_id}", response_model=dict)
+@router.get("/pageInfo/{item_id}", response_model=dict)
 async def get_page_info(
     item_id: int,
     db: Session = Depends(get_db)
@@ -37,7 +38,7 @@ async def get_page_info(
     return await get_page_info_service(db, item_id)
 
 
-@router.post("/", response_model=dict)
+@router.post("/pageInfo", response_model=dict)
 async def create_page_info(
     data: PageInfoCreate,
     db: Session = Depends(get_db)
@@ -46,20 +47,25 @@ async def create_page_info(
     return await create_page_info_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/pageInfo", response_model=dict)
 async def update_page_info(
-    item_id: int,
     data: PageInfoUpdate,
     db: Session = Depends(get_db)
 ):
     """更新页面信息"""
-    return await update_page_info_service(db, item_id, data)
+    return await update_page_info_service(db, data)
 
-
-@router.delete("/{item_id}", response_model=dict)
+@router.delete("/pageInfo/batch", response_model=dict)
+async def delete_page_info_batch(
+    ids: PageInfoIds,  # 页面ID列表，用于指定要删除的页面
+    db: Session = Depends(get_db)  # 数据库会话，通过依赖注入获取
+):
+    """删除页面信息"""
+    return await delete_page_info_batch_service(db, ids.ids)
+@router.delete("/pageInfo/{item_id}", response_model=dict)
 async def delete_page_info(
-    item_id: int,
-    db: Session = Depends(get_db)
+    item_id: int,  # 页面ID，用于指定要删除的页面
+    db: Session = Depends(get_db)  # 数据库会话，通过依赖注入获取
 ):
     """删除页面信息"""
     return await delete_page_info_service(db, item_id)

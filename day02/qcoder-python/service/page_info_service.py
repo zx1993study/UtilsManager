@@ -72,10 +72,10 @@ async def create_page_info_service(db: Session, data: PageInfoCreate):
     return success_response(msg="添加成功", data=schema_obj)
 
 
-async def update_page_info_service(db: Session, item_id: int, data: PageInfoUpdate):
+async def update_page_info_service(db: Session, data: PageInfoUpdate):
     """更新页面信息"""
     # 校验是否存在
-    existing = await get_page_info_by_id(db, item_id)
+    existing = await get_page_info_by_id(db, data.page_id)
     if not existing:
         return error_response(
             msg="更新失败，信息不存在",
@@ -83,23 +83,31 @@ async def update_page_info_service(db: Session, item_id: int, data: PageInfoUpda
             error='{"errorCode": "NOT_FOUND", "message": "页面信息不存在"}'
         )
     
-    obj = await update_page_info(db, item_id, data.model_dump(by_alias=False, exclude_unset=True))
+    obj = await update_page_info(db, data.page_id, data.model_dump(by_alias=False, exclude_unset=True))
     
     return success_response(msg="更新成功", data=obj)
 
-
-async def delete_page_info_service(db: Session, item_id: int):
-    """删除页面信息"""
-    # 校验是否存在
-    existing = await get_page_info_by_id(db, item_id)
-    if not existing:
+async def delete_page_info_batch_service(db: Session, ids: list[int]):
+    """批量删除页面信息"""
+    obj = await delete_page_info(db, ids)
+    if not obj:
         return error_response(
             msg="删除失败，信息不存在",
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "页面信息不存在"}'
         )
+    return success_response(msg="删除成功", data={"ids": ids, "message": "页面信息已删除"})
+
+async def delete_page_info_service(db: Session, item_id: int):
+    """删除页面信息"""
     
-    obj = await delete_page_info(db, item_id)
+    obj = await delete_page_info(db, [item_id])
+    if not obj:
+        return error_response(
+            msg="删除失败，信息不存在",
+            data=None,
+            error='{"errorCode": "NOT_FOUND", "message": "页面信息不存在"}'
+        )
     
     return success_response(
         msg="删除成功",

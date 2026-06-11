@@ -31,7 +31,12 @@ class PageResultCreate(PageResultBase):
 
 class PageResultUpdate(PageResultBase):
     """页面结果更新Schema"""
-    pass
+    page_result_id: int = Field(..., description="页面结果id")
+
+
+class PageResulIds(BaseModel):
+    """页面结果ID列表Schema"""  
+    ids: list[int] = Field(..., description="页面结果ID列表")
 
 
 class PageResultInfo(PageResultBase):

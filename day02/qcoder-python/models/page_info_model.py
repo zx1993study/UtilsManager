@@ -17,6 +17,7 @@ class PageInfo(Base):
     project_id = Column(BigInteger, comment="项目id")
     page_url = Column(String(500), comment="URL")
     token_id = Column(BigInteger, comment="tokenId")
+    file_name = Column(String(50), comment="功能代码文件名称")
     function = Column(Text, comment="功能")
     remark = Column(Text, comment="备注")
     creator = Column(String(50), comment="创建人")

@@ -32,7 +32,11 @@ class PageInstanceCreate(PageInstanceBase):
 
 class PageInstanceUpdate(PageInstanceBase):
     """页面实例更新Schema"""
-    pass
+    page_instance_id: int = Field(..., description="主键")
+    
+
+class PageInstanceIds(BaseModel):
+    ids: list[int] = Field(..., description="页面实例ID列表")
 
 
 class PageInstanceInfo(PageInstanceBase):

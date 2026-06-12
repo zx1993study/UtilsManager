@@ -15,6 +15,7 @@ class PageInstance(Base):
     page_id = Column(BigInteger, comment="页面id")
     operation_json = Column(Text, comment="操作JSON")
     instance_name = Column(String(50), comment="页面实例名称")
+    screen_photo_file = Column(String(100), comment="页面实例截图文件路径")
     description = Column(Text, comment="描述")
     expect_result = Column(Text, comment="预期结果")
     status = Column(SmallInteger, comment="状态")

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from models.page_info_model import PageInfo
 from typing import List, Optional, Tuple
+from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
 
 
 async def get_page_info_by_id(db: Session, page_id: int) -> Optional[PageInfo]:
@@ -39,7 +40,8 @@ async def get_page_info_by_unique_fields(
 async def get_page_info_list(
     db: Session, 
     page_num: int = 1, 
-    page_size: int = 10
+    page_size: int = 10,
+    project_id: Optional[int] = None
 ) -> Tuple[List[PageInfo], int]:
     """获取页面信息分页列表
     
@@ -49,17 +51,22 @@ async def get_page_info_list(
     # 计算偏移量
     offset = (page_num - 1) * page_size
     
+    base_query = db.query(PageInfo)
+    if project_id is not None:
+        base_query = base_query.filter(PageInfo.project_id == project_id)
+
     # 查询总数
-    total = db.query(func.count(PageInfo.page_id)).scalar()
+    total = base_query.with_entities(func.count(PageInfo.page_id)).scalar()
     
     # 查询分页数据
-    items = db.query(PageInfo).offset(offset).limit(page_size).all()
+    items = base_query.offset(offset).limit(page_size).all()
     
     return items, total
 
 
 async def create_page_info(db: Session, data: dict) -> PageInfo:
     """创建页面信息"""
+    data = set_audit_fields_for_create(data)
     db_obj = PageInfo(**data)
     db.add(db_obj)
     db.commit()
@@ -71,6 +78,7 @@ async def update_page_info(db: Session, page_id: int, data: dict) -> Optional[Pa
     """更新页面信息"""
     db_obj = db.query(PageInfo).filter(PageInfo.page_id == page_id).first()
     if db_obj:
+        data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)
         db.commit()

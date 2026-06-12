@@ -111,6 +111,8 @@
         border
         stripe
         :row-key="rowKey"
+        highlight-current-row
+        @row-click="handleRowClick"
         @selection-change="handleSelectionChange"
         @sort-change="handleSortChange"
       >
@@ -349,6 +351,7 @@ const emit = defineEmits([
   'current-change',
   'selection-change',
   'sort-change',
+  'row-click',
   'data-loaded'
 ])
 
@@ -527,6 +530,11 @@ const handleReset = () => {
 const handleSelectionChange = (selection) => {
   selectedRows.value = selection
   emit('selection-change', selection)
+}
+
+// 处理行点击
+const handleRowClick = (row, column, event) => {
+  emit('row-click', row, column, event)
 }
 
 // 处理排序变化

@@ -19,6 +19,17 @@
           {{ getTypeText(row.type) }}
         </el-tag>
       </template>
+
+      <template #tokenType="{ row }">
+        <el-tag :type="row.tokenType === 2 ? 'success' : 'primary'">
+          {{ getSourceText(row.tokenType) }}
+        </el-tag>
+      </template>
+
+      <template #instance="{ row }">
+        {{ getInstanceText(row) }}
+      </template>
+
       <template #operation="{ row }">
         <el-button
           type="primary"
@@ -30,9 +41,10 @@
           <span>刷新</span>
         </el-button>
       </template>
+
       <template #toolbar-right>
-        <el-button 
-          type="warning" 
+        <el-button
+          type="warning"
           :disabled="!selectedRows || selectedRows.length === 0"
           @click="handleBatchRefresh"
         >
@@ -42,14 +54,13 @@
       </template>
     </common-table>
 
-    <!-- 新增/编辑弹窗 -->
     <common-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
       :form-data="formData"
       :rules="formRules"
       :loading="submitLoading"
-      width="700px"
+      width="720px"
       @confirm="handleSubmit"
     >
       <el-form-item label="Token名称" prop="name">
@@ -57,20 +68,28 @@
       </el-form-item>
 
       <el-form-item label="Token类型" prop="type">
-        <el-select filterable v-model="formData.type" placeholder="请选择Token类型" style="width: 100%">
+        <el-select v-model="formData.type" filterable placeholder="请选择Token类型" style="width: 100%">
           <el-option label="Bearer" :value="1" />
           <el-option label="Basic" :value="2" />
           <el-option label="自定义" :value="3" />
         </el-select>
       </el-form-item>
 
-      <el-form-item label="Token" prop="token">
-        <el-input v-model="formData.token" placeholder="请输入Token" />
+      <el-form-item label="来源" prop="tokenType">
+        <el-select v-model="formData.tokenType" placeholder="请选择来源" style="width: 100%" @change="handleSourceChange">
+          <el-option label="API" :value="1" />
+          <el-option label="Web" :value="2" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item v-if="isApiToken" label="Token" prop="token">
+        <el-input v-model="formData.token" placeholder="请输入Token，刷新后会自动更新" />
       </el-form-item>
 
       <el-form-item label="所属项目" prop="projectId">
-        <el-select filterable
+        <el-select
           v-model="formData.projectId"
+          filterable
           placeholder="请选择所属项目"
           style="width: 100%"
           @change="handleProjectChange"
@@ -84,38 +103,83 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="API" prop="apiId">
-        <el-select filterable
-          v-model="formData.apiId"
-          placeholder="请选择API"
-          style="width: 100%"
-          :disabled="!formData.projectId"
-          @change="handleApiChange"
-        >
-          <el-option
-            v-for="item in apiOptions"
-            :key="item.apiId"
-            :label="item.apiName"
-            :value="item.apiId"
-          />
-        </el-select>
-      </el-form-item>
+      <template v-if="isApiToken">
+        <el-form-item label="API" prop="apiId">
+          <el-select
+            v-model="formData.apiId"
+            filterable
+            placeholder="请选择API"
+            style="width: 100%"
+            :disabled="!formData.projectId"
+            @change="handleApiChange"
+          >
+            <el-option
+              v-for="item in apiOptions"
+              :key="item.apiId"
+              :label="item.apiName"
+              :value="item.apiId"
+            />
+          </el-select>
+        </el-form-item>
 
-      <el-form-item label="API实例" prop="instanceId">
-        <el-select filterable
-          v-model="formData.instanceId"
-          placeholder="请选择API实例"
-          style="width: 100%"
-          :disabled="!formData.apiId"
-        >
-          <el-option
-            v-for="item in instanceOptions"
-            :key="item.instanceId"
-            :label="item.instanceName"
-            :value="item.instanceId"
-          />
-        </el-select>
-      </el-form-item>
+        <el-form-item label="API实例" prop="instanceId">
+          <el-select
+            v-model="formData.instanceId"
+            filterable
+            placeholder="请选择API实例"
+            style="width: 100%"
+            :disabled="!formData.apiId"
+          >
+            <el-option
+              v-for="item in apiInstanceOptions"
+              :key="item.instanceId"
+              :label="item.instanceName"
+              :value="item.instanceId"
+            />
+          </el-select>
+        </el-form-item>
+      </template>
+
+      <template v-else>
+        <el-form-item label="页面" prop="pageId">
+          <el-select
+            v-model="formData.pageId"
+            filterable
+            placeholder="请选择页面"
+            style="width: 100%"
+            :disabled="!formData.projectId"
+            @change="handlePageChange"
+          >
+            <el-option
+              v-for="item in pageOptions"
+              :key="item.pageId"
+              :label="item.pageName"
+              :value="item.pageId"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="页面实例" prop="instanceId">
+          <el-select
+            v-model="formData.instanceId"
+            filterable
+            placeholder="请选择页面实例"
+            style="width: 100%"
+            :disabled="!formData.pageId"
+          >
+            <el-option
+              v-for="item in pageInstanceOptions"
+              :key="item.pageInstanceId"
+              :label="item.instanceName"
+              :value="item.pageInstanceId"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="Token文件名" prop="token">
+          <el-input v-model="formData.token" placeholder="请输入token文件名，不填则自动生成" />
+        </el-form-item>
+      </template>
 
       <el-form-item label="备注" prop="remark">
         <el-input
@@ -130,7 +194,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -140,60 +204,99 @@ import * as tokenApi from '@/api/project/token'
 import * as projectApi from '@/api/project/project'
 import * as apiApi from '@/api/api/api'
 import * as testcaseApi from '@/api/api/api-testcase'
+import { getPageFunctionList } from '@/api/page/page-function'
+import { getPageTestCaseList } from '@/api/page/page-testcase'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
 
-// 下拉框选项
 const projectOptions = ref([])
 const apiOptions = ref([])
-const instanceOptions = ref([])
-
-// 选中的行
+const apiInstanceOptions = ref([])
+const pageOptions = ref([])
+const pageInstanceOptions = ref([])
 const selectedRows = ref([])
 
-// 列配置
 const columns = [
   { prop: 'name', label: 'Token名称', minWidth: 150 },
+  { prop: 'tokenType', label: '来源', width: 90, slot: 'tokenType' },
   { prop: 'type', label: 'Token类型', width: 100, slot: 'type' },
-  { prop: 'projectName', label: '项目名称', minWidth: 200, showOverflowTooltip: true },
-  { prop: 'projectAddress', label: '项目地址', minWidth: 200, showOverflowTooltip: true },
+  { prop: 'projectName', label: '项目名称', minWidth: 180, showOverflowTooltip: true },
+  { prop: 'instance', label: '关联实例', minWidth: 180, slot: 'instance', showOverflowTooltip: true },
+  { prop: 'token', label: 'Token/文件名', minWidth: 180, showOverflowTooltip: true },
   { prop: 'remark', label: '备注', minWidth: 150, showOverflowTooltip: true }
 ]
 
-// 搜索字段配置
 const searchFields = [
   { type: 'input', prop: 'name', label: 'Token名称', placeholder: '请输入Token名称' },
-  { type: 'input', prop: 'projectName', label: '项目名称', placeholder: '请输入项目名称' }
+  {
+    type: 'select',
+    prop: 'tokenType',
+    label: '来源',
+    placeholder: '请选择来源',
+    options: [
+      { label: 'API', value: 1 },
+      { label: 'Web', value: 2 }
+    ]
+  }
 ]
 
-// 分页配置
 const pagination = reactive({
   pageNum: 1,
   pageSize: 10,
   total: 0
 })
 
-// 弹窗配置
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const formData = reactive({
   tokenId: null,
   name: '',
-  type: null,
+  type: 1,
+  tokenType: 1,
   token: '',
   projectId: null,
   apiId: null,
+  pageId: null,
   instanceId: null,
   remark: ''
 })
 
-const formRules = {
-  name: [{ required: true, message: '请输入Token名称', trigger: 'blur' }],
-  projectId: [{ required: true, message: '请选择所属项目', trigger: 'change' }]
+const isApiToken = computed(() => Number(formData.tokenType) === 1)
+
+const validateApiId = (_rule, value, callback) => {
+  if (isApiToken.value && !value) {
+    callback(new Error('请选择API'))
+    return
+  }
+  callback()
 }
 
-// 获取Token类型文本
+const validatePageId = (_rule, value, callback) => {
+  if (!isApiToken.value && !value) {
+    callback(new Error('请选择页面'))
+    return
+  }
+  callback()
+}
+
+const validateInstanceId = (_rule, value, callback) => {
+  if (!value) {
+    callback(new Error(isApiToken.value ? '请选择API实例' : '请选择页面实例'))
+    return
+  }
+  callback()
+}
+
+const formRules = {
+  name: [{ required: true, message: '请输入Token名称', trigger: 'blur' }],
+  tokenType: [{ required: true, message: '请选择来源', trigger: 'change' }],
+  projectId: [{ required: true, message: '请选择所属项目', trigger: 'change' }],
+  apiId: [{ validator: validateApiId, trigger: 'change' }],
+  pageId: [{ validator: validatePageId, trigger: 'change' }],
+  instanceId: [{ validator: validateInstanceId, trigger: 'change' }]
+}
+
 const getTypeText = (type) => {
   const types = {
     1: 'Bearer',
@@ -203,7 +306,6 @@ const getTypeText = (type) => {
   return types[type] || '未知'
 }
 
-// 获取Token类型颜色
 const getTypeColor = (type) => {
   const colors = {
     1: 'primary',
@@ -213,85 +315,179 @@ const getTypeColor = (type) => {
   return colors[type] || 'info'
 }
 
-// 加载项目下拉列表
+const getSourceText = (tokenType) => Number(tokenType) === 2 ? 'Web' : 'API'
+
+const getInstanceText = (row) => {
+  if (Number(row.tokenType) === 2) {
+    return row.pageInstanceName || row.pageName || row.instanceId || '-'
+  }
+  return row.apiInstanceName || row.apiName || row.instanceId || '-'
+}
+
+const getListItems = (res) => res.data?.items || res.data?.list || res.data || []
+
 const loadProjectOptions = async () => {
   try {
-    const res = await projectApi.getProjectList({ pageNum: 1, pageSize: 1000 })
-    projectOptions.value = res.data?.items || res.data?.list || res.data || []
+    const res = await projectApi.getProjectList({ pageNum: 1, pageSize: 100 })
+    projectOptions.value = getListItems(res)
   } catch (error) {
     console.error('加载项目列表失败:', error)
   }
 }
 
-// 加载API下拉列表
 const loadApiOptions = async (projectId) => {
   if (!projectId) {
     apiOptions.value = []
     return
   }
   try {
-    const res = await apiApi.getApiList({ projectId, pageNum: 1, pageSize: 1000 })
-    apiOptions.value = res.data?.items || res.data?.list || res.data || []
+    const res = await apiApi.getApiList({ projectId, pageNum: 1, pageSize: 100 })
+    apiOptions.value = getListItems(res)
   } catch (error) {
     console.error('加载API列表失败:', error)
   }
 }
 
-// 加载API实例下拉列表
-const loadInstanceOptions = async (apiId) => {
+const loadApiInstanceOptions = async (apiId) => {
   if (!apiId) {
-    instanceOptions.value = []
+    apiInstanceOptions.value = []
     return
   }
   try {
-    const res = await testcaseApi.getTestcaseList({ apiId, pageNum: 1, pageSize: 1000 })
-    instanceOptions.value = res.data?.items || res.data?.list || res.data || []
+    const res = await testcaseApi.getTestcaseList({ apiId, pageNum: 1, pageSize: 100 })
+    apiInstanceOptions.value = getListItems(res)
   } catch (error) {
     console.error('加载API实例列表失败:', error)
   }
 }
 
-// 处理项目变化
-const handleProjectChange = (projectId) => {
-  // 清空API和实例选择
+const loadPageOptions = async (projectId) => {
+  if (!projectId) {
+    pageOptions.value = []
+    return
+  }
+  try {
+    const res = await getPageFunctionList({ projectId, pageNum: 1, pageSize: 100 })
+    pageOptions.value = getListItems(res)
+  } catch (error) {
+    console.error('加载页面列表失败:', error)
+  }
+}
+
+const loadPageInstanceOptions = async (pageId) => {
+  if (!pageId) {
+    pageInstanceOptions.value = []
+    return
+  }
+  try {
+    const res = await getPageTestCaseList({ pageId, pageNum: 1, pageSize: 100 })
+    pageInstanceOptions.value = getListItems(res)
+  } catch (error) {
+    console.error('加载页面实例列表失败:', error)
+  }
+}
+
+const clearApiFields = () => {
   formData.apiId = null
+  apiOptions.value = []
+  apiInstanceOptions.value = []
+}
+
+const clearPageFields = () => {
+  formData.pageId = null
+  pageOptions.value = []
+  pageInstanceOptions.value = []
+}
+
+const handleSourceChange = () => {
+  formData.instanceId = null
+  if (isApiToken.value) {
+    clearPageFields()
+    if (formData.projectId) {
+      loadApiOptions(formData.projectId)
+    }
+  } else {
+    clearApiFields()
+    if (formData.projectId) {
+      loadPageOptions(formData.projectId)
+    }
+  }
+}
+
+const handleProjectChange = (projectId) => {
+  formData.apiId = null
+  formData.pageId = null
   formData.instanceId = null
   apiOptions.value = []
-  instanceOptions.value = []
-  
-  // 加载API列表
-  if (projectId) {
+  apiInstanceOptions.value = []
+  pageOptions.value = []
+  pageInstanceOptions.value = []
+
+  if (!projectId) {
+    return
+  }
+
+  if (isApiToken.value) {
     loadApiOptions(projectId)
+  } else {
+    loadPageOptions(projectId)
   }
 }
 
-// 处理API变化
 const handleApiChange = (apiId) => {
-  // 清空实例选择
   formData.instanceId = null
-  instanceOptions.value = []
-  
-  // 加载实例列表
+  apiInstanceOptions.value = []
   if (apiId) {
-    loadInstanceOptions(apiId)
+    loadApiInstanceOptions(apiId)
   }
 }
 
-// 处理新增
+const handlePageChange = (pageId) => {
+  formData.instanceId = null
+  pageInstanceOptions.value = []
+  if (pageId) {
+    loadPageInstanceOptions(pageId)
+  }
+}
+
 const handleAdd = () => {
   dialogTitle.value = '新增Token'
   resetForm()
   dialogVisible.value = true
 }
 
-// 处理编辑
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   dialogTitle.value = '编辑Token'
-  Object.assign(formData, row)
+  resetForm()
+  Object.assign(formData, {
+    tokenId: row.tokenId,
+    name: row.name || '',
+    type: row.type || 1,
+    tokenType: row.tokenType || 1,
+    token: row.token || '',
+    projectId: row.projectId || null,
+    apiId: row.apiId || null,
+    pageId: row.pageId || null,
+    instanceId: row.instanceId || null,
+    remark: row.remark || ''
+  })
+
   dialogVisible.value = true
+  if (formData.projectId) {
+    if (isApiToken.value) {
+      await loadApiOptions(formData.projectId)
+      if (formData.apiId) {
+        await loadApiInstanceOptions(formData.apiId)
+      }
+    } else {
+      await loadPageOptions(formData.projectId)
+      if (formData.pageId) {
+        await loadPageInstanceOptions(formData.pageId)
+      }
+    }
+  }
 }
 
-// 处理删除
 const handleDelete = (row) => {
   ElMessageBox.confirm(`确定要删除Token"${row.name}"吗？`, '提示', {
     confirmButtonText: '确定',
@@ -309,7 +505,6 @@ const handleDelete = (row) => {
   }).catch(() => {})
 }
 
-// 处理批量删除
 const handleBatchDelete = async (rows) => {
   ElMessageBox.confirm(`确定要删除选中的 ${rows.length} 个Token吗？`, '提示', {
     confirmButtonText: '确定',
@@ -328,7 +523,6 @@ const handleBatchDelete = async (rows) => {
   }).catch(() => {})
 }
 
-// 处理单个刷新
 const handleRefreshToken = (row) => {
   ElMessageBox.confirm(`确定要刷新Token“${row.name}”吗？`, '提示', {
     confirmButtonText: '确定',
@@ -347,7 +541,6 @@ const handleRefreshToken = (row) => {
   }).catch(() => {})
 }
 
-// 处理批量刷新
 const handleBatchRefresh = () => {
   if (!selectedRows.value || selectedRows.value.length === 0) {
     ElMessage.warning('请选择要刷新的Token')
@@ -364,8 +557,7 @@ const handleBatchRefresh = () => {
       const res = await tokenApi.batchRefreshToken(ids)
       if (handleApiResponse(res, '批量刷新成功', '批量刷新失败')) {
         tableRef.value?.refresh()
-        // 清空选择
-        tableRef.value.clearSelection()
+        tableRef.value?.clearSelection()
       }
     } catch (error) {
       console.error('批量刷新失败:', error)
@@ -374,13 +566,29 @@ const handleBatchRefresh = () => {
   }).catch(() => {})
 }
 
-// 处理提交
+const buildSubmitPayload = () => {
+  const payload = {
+    name: formData.name,
+    type: formData.type,
+    tokenType: formData.tokenType,
+    token: formData.token,
+    projectId: formData.projectId,
+    instanceId: formData.instanceId,
+    remark: formData.remark
+  }
+  if (formData.tokenId) {
+    payload.tokenId = formData.tokenId
+  }
+  return payload
+}
+
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
+    const payload = buildSubmitPayload()
     const res = formData.tokenId
-      ? await tokenApi.updateToken(formData)
-      : await tokenApi.addToken(formData)
+      ? await tokenApi.updateToken(payload)
+      : await tokenApi.addToken(payload)
     if (handleApiResponse(res, formData.tokenId ? '编辑成功' : '新增成功', '提交失败')) {
       dialogVisible.value = false
       tableRef.value?.refresh()
@@ -392,28 +600,29 @@ const handleSubmit = async () => {
   }
 }
 
-// 重置表单
 const resetForm = () => {
   Object.assign(formData, {
     tokenId: null,
     name: '',
-    type: null,
+    type: 1,
+    tokenType: 1,
+    token: '',
     projectId: null,
     apiId: null,
+    pageId: null,
     instanceId: null,
     remark: ''
   })
-  // 清空下拉选项
   apiOptions.value = []
-  instanceOptions.value = []
+  apiInstanceOptions.value = []
+  pageOptions.value = []
+  pageInstanceOptions.value = []
 }
 
-// 处理选择变化
 const handleSelectionChange = (selection) => {
   selectedRows.value = selection
 }
 
-// 页面加载时获取项目列表
 onMounted(() => {
   loadProjectOptions()
 })

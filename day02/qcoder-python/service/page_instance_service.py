@@ -10,8 +10,10 @@ from mysql.page_instance_sql import (
     get_page_instance_list,
     create_page_instance,
     update_page_instance,
-    delete_page_instance
+    delete_page_instance,
+    delete_page_instance_batch
 )
+from mysql.page_result_sql import delete_page_result_by_instance_ids
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
 
@@ -31,9 +33,9 @@ async def get_page_instance_service(db: Session, item_id: int):
     return success_response(msg="查询成功", data=schema_obj)
 
 
-async def get_page_instance_list_service(db: Session, page_num: int = 1, page_size: int = 10):
+async def get_page_instance_list_service(db: Session, page_num: int = 1, page_size: int = 10, page_id: int = None):
     """获取页面实例分页列表"""
-    items, total = await get_page_instance_list(db, page_num, page_size)
+    items, total = await get_page_instance_list(db, page_num, page_size, page_id)
     
     # 将ORM对象转换为Schema对象
     schema_items = [PageInstanceInfo.model_validate(item) for item in items]
@@ -84,8 +86,9 @@ async def update_page_instance_service(db: Session, item_id: int, data: PageInst
         )
     
     obj = await update_page_instance(db, item_id, data.model_dump(by_alias=False, exclude_unset=True))
-    
-    return success_response(msg="更新成功", data=obj)
+    schema_obj = PageInstanceInfo.model_validate(obj)
+
+    return success_response(msg="更新成功", data=schema_obj)
 
 
 async def delete_page_instance_service(db: Session, item_id: int):
@@ -99,9 +102,30 @@ async def delete_page_instance_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "页面实例不存在"}'
         )
     
+    await delete_page_result_by_instance_ids(db, [item_id])
     obj = await delete_page_instance(db, item_id)
-    
+
     return success_response(
         msg="删除成功",
         data={"id": item_id, "message": "页面实例已删除"}
     )
+
+
+async def delete_page_instance_batch_service(db: Session, ids: list[int]):
+    """批量删除页面实例（含级联删除其 page_result）"""
+    if not ids:
+        return error_response(
+            msg="删除失败，未提供要删除的ID",
+            data=None,
+            error='{"errorCode": "INVALID_PARAM", "message": "ids为空"}'
+        )
+    # 手动级联：先删子表 page_result，再删实例
+    await delete_page_result_by_instance_ids(db, ids)
+    count = await delete_page_instance_batch(db, ids)
+    if not count:
+        return error_response(
+            msg="删除失败，信息不存在",
+            data=None,
+            error='{"errorCode": "NOT_FOUND", "message": "页面实例不存在"}'
+        )
+    return success_response(msg="删除成功", data={"ids": ids, "message": "页面实例已删除"})

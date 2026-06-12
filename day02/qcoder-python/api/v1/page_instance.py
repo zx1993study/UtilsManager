@@ -6,29 +6,40 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.page_instance_schemas import PageInstanceCreate, PageInstanceUpdate, PageInstanceInfo
+from schemas.page_instance_schemas import PageInstanceCreate, PageInstanceUpdate, PageInstanceInfo, PageInstanceIds
 from service.page_instance_service import (
     get_page_instance_service,
     get_page_instance_list_service,
     create_page_instance_service,
     update_page_instance_service,
-    delete_page_instance_service
+    delete_page_instance_service,
+    delete_page_instance_batch_service
 )
 
-router = APIRouter(prefix="/pageInstance", tags=["页面实例"])
+router = APIRouter()
 
 
-@router.get("/", response_model=dict)
+@router.get("/pageInstance", response_model=dict)
 async def list_page_instance(
-    page_num: int = Query(default=1, ge=1, description="页码"),
-    page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
+    page_num: int = Query(default=1, alias="pageNum", ge=1, description="页码"),
+    page_size: int = Query(default=10, alias="pageSize", ge=1, le=100, description="每页大小"),
+    page_id: int | None = Query(None, alias="pageId", description="页面ID"),
     db: Session = Depends(get_db)
 ):
     """获取页面实例分页列表"""
-    return await get_page_instance_list_service(db, page_num, page_size)
+    return await get_page_instance_list_service(db, page_num, page_size, page_id)
 
 
-@router.get("/{item_id}", response_model=dict)
+@router.delete("/pageInstance/batch", response_model=dict)
+async def delete_page_instance_batch(
+    data: PageInstanceIds,
+    db: Session = Depends(get_db)
+):
+    """批量删除页面实例"""
+    return await delete_page_instance_batch_service(db, data.ids)
+
+
+@router.get("/pageInstance/{item_id}", response_model=dict)
 async def get_page_instance(
     item_id: int,
     db: Session = Depends(get_db)
@@ -37,7 +48,7 @@ async def get_page_instance(
     return await get_page_instance_service(db, item_id)
 
 
-@router.post("/", response_model=dict)
+@router.post("/pageInstance", response_model=dict)
 async def create_page_instance(
     data: PageInstanceCreate,
     db: Session = Depends(get_db)
@@ -46,17 +57,16 @@ async def create_page_instance(
     return await create_page_instance_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/pageInstance", response_model=dict)
 async def update_page_instance(
-    item_id: int,
     data: PageInstanceUpdate,
     db: Session = Depends(get_db)
 ):
     """更新页面实例"""
-    return await update_page_instance_service(db, item_id, data)
+    return await update_page_instance_service(db,data.page_instance_id, data)
 
 
-@router.delete("/{item_id}", response_model=dict)
+@router.delete("/pageInstance/{item_id}", response_model=dict)
 async def delete_page_instance(
     item_id: int,
     db: Session = Depends(get_db)

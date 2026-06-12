@@ -21,12 +21,13 @@ router = APIRouter()
 
 @router.get("/pageInfo", response_model=dict)
 async def list_page_info(
-    page_num: int = Query(default=1, ge=1, description="页码"),
-    page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
+    page_num: int = Query(default=1, alias="pageNum", ge=1, description="页码"),
+    page_size: int = Query(default=10, alias="pageSize", ge=1, le=1000, description="每页大小"),
+    project_id: int | None = Query(None, alias="projectId", description="项目ID"),
     db: Session = Depends(get_db)
 ):
     """获取页面信息分页列表"""
-    return await get_page_info_list_service(db, page_num, page_size)
+    return await get_page_info_list_service(db, page_num, page_size, project_id)
 
 
 @router.get("/pageInfo/{item_id}", response_model=dict)

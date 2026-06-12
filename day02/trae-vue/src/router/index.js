@@ -158,7 +158,13 @@ const routes = [
         path: '/page/template',
         name: 'PageTemplate',
         component: () => import('@/views/page/template/index.vue'),
-        meta: { title: '元素模板', icon: 'Document' }
+        meta: { title: '元素模板', icon: 'Document', hidden: true }
+      },
+      {
+        path: '/page/function-detail/:pageId',
+        name: 'PageFunctionDetail',
+        component: () => import('@/views/page/function-detail/index.vue'),
+        meta: { title: '页面功能详情', hidden: true }
       },
       {
         path: '/page/testcase',

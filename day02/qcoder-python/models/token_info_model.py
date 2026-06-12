@@ -14,6 +14,7 @@ class TokenInfo(Base):
     token_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="tokenId")
     name = Column(String(50), comment="名称")
     type = Column(SmallInteger, comment="类型")
+    token_type = Column(SmallInteger, comment="token类型 1api 2web")
     project_id = Column(BigInteger, comment="项目id")
     instance_id = Column(BigInteger, comment="实例id")
     status = Column(SmallInteger, comment="状态")

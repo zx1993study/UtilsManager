@@ -6,37 +6,49 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from models.page_result_model import PageResult
 from typing import List, Optional, Tuple
+from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
 
 
-async def get_page_result_by_id(db: Session, result_id: int) -> Optional[PageResult]:
+async def get_page_result_by_id(db: Session, page_result_id: int) -> Optional[PageResult]:
     """根据ID获取页面结果"""
-    return db.query(PageResult).filter(PageResult.result_id == result_id).first()
+    return db.query(PageResult).filter(PageResult.page_result_id == page_result_id).first()
 
 
 async def get_page_result_list(
-    db: Session, 
-    page_num: int = 1, 
+    db: Session,
+    page_num: int = 1,
     page_size: int = 10
 ) -> Tuple[List[PageResult], int]:
     """获取页面结果分页列表
-    
+
     Returns:
         Tuple[List[PageResult], int]: (数据列表, 总记录数)
     """
     # 计算偏移量
     offset = (page_num - 1) * page_size
-    
+
     # 查询总数
-    total = db.query(func.count(PageResult.result_id)).scalar()
-    
+    total = db.query(func.count(PageResult.page_result_id)).scalar()
+
     # 查询分页数据
     items = db.query(PageResult).offset(offset).limit(page_size).all()
-    
+
     return items, total
+
+
+async def get_latest_page_result_by_instance_id(
+    db: Session,
+    instance_id: int
+) -> Optional[PageResult]:
+    """根据页面实例ID获取最新页面结果"""
+    return db.query(PageResult).filter(
+        PageResult.page_instance_id == instance_id
+    ).order_by(PageResult.page_result_id.desc()).first()
 
 
 async def create_page_result(db: Session, data: dict) -> PageResult:
     """创建页面结果"""
+    data = set_audit_fields_for_create(data)
     db_obj = PageResult(**data)
     db.add(db_obj)
     db.commit()
@@ -44,10 +56,21 @@ async def create_page_result(db: Session, data: dict) -> PageResult:
     return db_obj
 
 
-async def update_page_result(db: Session, result_id: int, data: dict) -> Optional[PageResult]:
+async def batch_create_page_result(db: Session, rows: List[dict]) -> int:
+    """批量创建页面结果，返回写入条数"""
+    if not rows:
+        return 0
+    objs = [PageResult(**set_audit_fields_for_create(dict(row))) for row in rows]
+    db.add_all(objs)
+    db.commit()
+    return len(objs)
+
+
+async def update_page_result(db: Session, page_result_id: int, data: dict) -> Optional[PageResult]:
     """更新页面结果"""
-    db_obj = db.query(PageResult).filter(PageResult.result_id == result_id).first()
+    db_obj = db.query(PageResult).filter(PageResult.page_result_id == page_result_id).first()
     if db_obj:
+        data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)
         db.commit()
@@ -55,10 +78,22 @@ async def update_page_result(db: Session, result_id: int, data: dict) -> Optiona
     return db_obj
 
 
-async def delete_page_result(db: Session, result_id: int) -> Optional[PageResult]:
+async def delete_page_result(db: Session, page_result_id: int) -> Optional[PageResult]:
     """删除页面结果"""
-    db_obj = db.query(PageResult).filter(PageResult.result_id == result_id).first()
+    db_obj = db.query(PageResult).filter(PageResult.page_result_id == page_result_id).first()
     if db_obj:
         db.delete(db_obj)
         db.commit()
     return db_obj
+
+
+async def delete_page_result_by_instance_ids(db: Session, instance_ids: List[int]) -> int:
+    """根据页面实例ID列表删除页面结果（手动级联），返回删除条数"""
+    if not instance_ids:
+        return 0
+    count = db.query(PageResult).filter(
+        PageResult.page_instance_id.in_(instance_ids)
+    ).delete(synchronize_session=False)
+    if count:
+        db.commit()
+    return count

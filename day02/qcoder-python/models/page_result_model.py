@@ -17,7 +17,7 @@ class PageResult(Base):
     code = Column(String(50), comment="code")
     result_status = Column(SmallInteger, comment="结果状态")
     remark = Column(Text, comment="备注")
-    screenshot_path = Column(String(500), comment="截图路径")
+    screenshot_path = Column(Text, comment="截图路径(JSON数组)")
     creator = Column(String(50), comment="创建人")
     create_time = Column(DateTime, comment="创建时间")
     update_time = Column(DateTime, comment="更新时间")

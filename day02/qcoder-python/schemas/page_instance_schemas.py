@@ -19,6 +19,7 @@ class PageInstanceBase(BaseModel):
     page_id: Optional[int] = Field(None, description="页面id")
     operation_json: Optional[str] = Field(None, description="操作JSON")
     instance_name: Optional[str] = Field(None, description="页面实例名称")
+    screen_photo_file: Optional[str] = Field(None, description="页面实例截图文件路径")
     description: Optional[str] = Field(None, description="描述")
     expect_result: Optional[str] = Field(None, description="预期结果")
     status: Optional[int] = Field(None, description="状态")

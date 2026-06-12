@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.token_info_schemas import TokenInfoCreate,TokenInfoList, TokenInfoUpdate, TokenInfoInfo
+from schemas.token_info_schemas import TokenInfoCreate, TokenInfoIds, TokenInfoList, TokenInfoUpdate, TokenInfoInfo
 from service.token_info_service import (
     get_token_info_service,
     get_token_info_list_service,
     create_token_info_service,
     update_token_info_service,
     delete_token_info_service,
+    delete_token_info_batch_service,
     refresh_token_service
 )
 
@@ -26,15 +27,6 @@ async def list_token_info(
 ):
     """获取Token信息分页列表"""
     return await get_token_info_list_service(db, filter = search_params)
-
-
-@router.get("/tokenInfo/{item_id}", response_model=dict)
-async def get_token_info(
-    item_id: int,
-    db: Session = Depends(get_db)
-):
-    """获取Token信息详情"""
-    return await get_token_info_service(db, item_id)
 
 
 @router.post("/tokenInfo", response_model=dict)
@@ -53,6 +45,41 @@ async def update_token_info(
 ):
     """更新Token信息"""
     return await update_token_info_service(db,  data)
+
+
+@router.delete("/tokenInfo/batch", response_model=dict)
+async def delete_token_info_batch(
+    data: TokenInfoIds,
+    db: Session = Depends(get_db)
+):
+    """批量删除Token信息"""
+    return await delete_token_info_batch_service(db, data.ids)
+
+
+@router.post("/tokenInfo/refresh/batch", response_model=dict)
+async def refresh_token_batch(
+    data: TokenInfoIds,
+    db: Session = Depends(get_db)
+):
+    """批量刷新Token"""
+    results = []
+    for token_id in data.ids:
+        results.append(await refresh_token_service(db, token_id))
+    failed = [item for item in results if not item.get("success")]
+    return {
+        "success": len(failed) == 0,
+        "msg": "批量刷新成功" if not failed else "批量刷新部分失败",
+        "data": {"results": results, "failed": failed}
+    }
+
+
+@router.get("/tokenInfo/{item_id}", response_model=dict)
+async def get_token_info(
+    item_id: int,
+    db: Session = Depends(get_db)
+):
+    """获取Token信息详情"""
+    return await get_token_info_service(db, item_id)
 
 
 @router.delete("/tokenInfo/{item_id}", response_model=dict)

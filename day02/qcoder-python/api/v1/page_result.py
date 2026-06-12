@@ -10,15 +10,16 @@ from schemas.page_result_schemas import PageResultCreate, PageResultUpdate, Page
 from service.page_result_service import (
     get_page_result_service,
     get_page_result_list_service,
+    get_latest_page_result_by_instance_service,
     create_page_result_service,
     update_page_result_service,
     delete_page_result_service
 )
 
-router = APIRouter(prefix="/pageResult", tags=["页面结果"])
+router = APIRouter()
 
 
-@router.get("/", response_model=dict)
+@router.get("/pageResult", response_model=dict)
 async def list_page_result(
     page_num: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
@@ -28,7 +29,16 @@ async def list_page_result(
     return await get_page_result_list_service(db, page_num, page_size)
 
 
-@router.get("/{item_id}", response_model=dict)
+@router.get("/pageResult/latest", response_model=dict)
+async def get_latest_page_result(
+    instance_id: int = Query(..., alias="instanceId", description="页面实例ID"),
+    db: Session = Depends(get_db)
+):
+    """根据页面实例获取最新页面结果"""
+    return await get_latest_page_result_by_instance_service(db, instance_id)
+
+
+@router.get("/pageResult/{item_id}", response_model=dict)
 async def get_page_result(
     item_id: int,
     db: Session = Depends(get_db)
@@ -37,7 +47,7 @@ async def get_page_result(
     return await get_page_result_service(db, item_id)
 
 
-@router.post("/", response_model=dict)
+@router.post("/pageResult", response_model=dict)
 async def create_page_result(
     data: PageResultCreate,
     db: Session = Depends(get_db)
@@ -46,17 +56,16 @@ async def create_page_result(
     return await create_page_result_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/pageResult", response_model=dict)
 async def update_page_result(
-    item_id: int,
     data: PageResultUpdate,
     db: Session = Depends(get_db)
 ):
     """更新页面结果"""
-    return await update_page_result_service(db, item_id, data)
+    return await update_page_result_service(db, data.page_result_id, data)
 
 
-@router.delete("/{item_id}", response_model=dict)
+@router.delete("/pageResult/{item_id}", response_model=dict)
 async def delete_page_result(
     item_id: int,
     db: Session = Depends(get_db)

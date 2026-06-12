@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func,select
 from models.token_info_model import TokenInfo
 from models.project_info_model import ProjectInfo
+from models.api_instance_model import ApiInstance
+from models.api_info_model import ApiInfo
+from models.page_instance_model import PageInstance
+from models.page_info_model import PageInfo
 from typing import List, Optional, Tuple
 from schemas.token_info_schemas import TokenInfoList
 
@@ -62,13 +66,29 @@ async def get_token_info_list(
     ).where(*filter.filter_params())
     total = db.execute(count_stmt).scalar()
     
-    # 使用JOIN查询关联project_info表
+    # 使用JOIN查询关联project_info表，并按来源补充API/页面关联信息
     items = db.query(
         TokenInfo,
         ProjectInfo.project_name,
-        ProjectInfo.project_address
+        ProjectInfo.project_address,
+        ApiInstance.api_id,
+        ApiInfo.api_name,
+        ApiInstance.instance_name.label("api_instance_name"),
+        PageInstance.page_id,
+        PageInfo.page_name,
+        PageInstance.instance_name.label("page_instance_name")
     ).outerjoin(
         ProjectInfo, TokenInfo.project_id == ProjectInfo.project_id
+    ).outerjoin(
+        ApiInstance,
+        and_(TokenInfo.token_type == 1, TokenInfo.instance_id == ApiInstance.instance_id)
+    ).outerjoin(
+        ApiInfo, ApiInstance.api_id == ApiInfo.api_id
+    ).outerjoin(
+        PageInstance,
+        and_(TokenInfo.token_type == 2, TokenInfo.instance_id == PageInstance.page_instance_id)
+    ).outerjoin(
+        PageInfo, PageInstance.page_id == PageInfo.page_id
     ).filter(*filter.filter_params()).offset(offset).limit(filter.page_size).all()
     
     # 将查询结果转换为字典列表
@@ -79,6 +99,7 @@ async def get_token_info_list(
             'token_id': token_info.token_id,
             'name': token_info.name,
             'type': token_info.type,
+            'token_type': token_info.token_type,
             'project_id': token_info.project_id,
             'instance_id': token_info.instance_id,
             'status': token_info.status,
@@ -88,7 +109,13 @@ async def get_token_info_list(
             'create_time': token_info.create_time,
             'update_time': token_info.update_time,
             'project_name': item[1],
-            'project_address': item[2]
+            'project_address': item[2],
+            'api_id': item[3],
+            'api_name': item[4],
+            'api_instance_name': item[5],
+            'page_id': item[6],
+            'page_name': item[7],
+            'page_instance_name': item[8],
         }
         result_list.append(result_dict)
     
@@ -122,3 +149,15 @@ async def delete_token_info(db: Session, token_id: int) -> Optional[TokenInfo]:
         db.delete(db_obj)
         db.commit()
     return db_obj
+
+
+async def delete_token_info_batch(db: Session, token_ids: List[int]) -> int:
+    """批量删除Token信息"""
+    if not token_ids:
+        return 0
+    count = db.query(TokenInfo).filter(
+        TokenInfo.token_id.in_(token_ids)
+    ).delete(synchronize_session=False)
+    if count:
+        db.commit()
+    return count

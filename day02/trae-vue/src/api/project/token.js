@@ -83,8 +83,8 @@ export function refreshToken(id) {
 // 批量刷新Token
 export function batchRefreshToken(ids) {
   return request({
-      url: '/api/v1/apiExecute/execute',
-      method: 'post',
-      data: { executionType: 2, targetIds: ids }
-    })
+    url: '/api/v1/tokenInfo/refresh/batch',
+    method: 'post',
+    data: { ids }
+  })
 }

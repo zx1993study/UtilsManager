@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from models.page_instance_model import PageInstance
 from typing import List, Optional, Tuple
+from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
 
 
 async def get_page_instance_by_id(db: Session, page_instance_id: int) -> Optional[PageInstance]:
@@ -37,29 +38,53 @@ async def get_page_instance_by_unique_fields(
 
 
 async def get_page_instance_list(
-    db: Session, 
-    page_num: int = 1, 
-    page_size: int = 10
+    db: Session,
+    page_num: int = 1,
+    page_size: int = 10,
+    page_id: Optional[int] = None
 ) -> Tuple[List[PageInstance], int]:
     """获取页面实例分页列表
-    
+
+    Args:
+        page_id: 可选，按页面ID过滤（详情页只看本页面的实例）
+
     Returns:
         Tuple[List[PageInstance], int]: (数据列表, 总记录数)
     """
     # 计算偏移量
     offset = (page_num - 1) * page_size
-    
+
+    # 基础查询，按需过滤 page_id
+    base_query = db.query(PageInstance)
+    if page_id is not None:
+        base_query = base_query.filter(PageInstance.page_id == page_id)
+
     # 查询总数
-    total = db.query(func.count(PageInstance.page_instance_id)).scalar()
-    
+    total = base_query.with_entities(func.count(PageInstance.page_instance_id)).scalar()
+
     # 查询分页数据
-    items = db.query(PageInstance).offset(offset).limit(page_size).all()
-    
+    items = base_query.offset(offset).limit(page_size).all()
+
     return items, total
+
+
+async def get_page_instances_by_ids(db: Session, ids: List[int]) -> List[PageInstance]:
+    """根据页面实例ID列表批量获取页面实例"""
+    if not ids:
+        return []
+    return db.query(PageInstance).filter(PageInstance.page_instance_id.in_(ids)).all()
+
+
+async def get_page_instances_by_page_ids(db: Session, page_ids: List[int]) -> List[PageInstance]:
+    """根据页面ID列表获取其下的全部页面实例"""
+    if not page_ids:
+        return []
+    return db.query(PageInstance).filter(PageInstance.page_id.in_(page_ids)).all()
 
 
 async def create_page_instance(db: Session, data: dict) -> PageInstance:
     """创建页面实例"""
+    data = set_audit_fields_for_create(data)
     db_obj = PageInstance(**data)
     db.add(db_obj)
     db.commit()
@@ -71,6 +96,7 @@ async def update_page_instance(db: Session, page_instance_id: int, data: dict) -
     """更新页面实例"""
     db_obj = db.query(PageInstance).filter(PageInstance.page_instance_id == page_instance_id).first()
     if db_obj:
+        data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)
         db.commit()
@@ -85,3 +111,27 @@ async def delete_page_instance(db: Session, page_instance_id: int) -> Optional[P
         db.delete(db_obj)
         db.commit()
     return db_obj
+
+
+async def delete_page_instance_batch(db: Session, ids: List[int]) -> int:
+    """根据页面实例ID列表批量删除，返回删除条数"""
+    if not ids:
+        return 0
+    count = db.query(PageInstance).filter(
+        PageInstance.page_instance_id.in_(ids)
+    ).delete(synchronize_session=False)
+    if count:
+        db.commit()
+    return count
+
+
+async def delete_page_instance_by_page_ids(db: Session, page_ids: List[int]) -> int:
+    """根据页面ID列表删除页面实例（手动级联），返回删除条数"""
+    if not page_ids:
+        return 0
+    count = db.query(PageInstance).filter(
+        PageInstance.page_id.in_(page_ids)
+    ).delete(synchronize_session=False)
+    if count:
+        db.commit()
+    return count

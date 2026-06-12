@@ -1,5 +1,7 @@
 import traceback
+import os
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
@@ -84,6 +86,21 @@ app.add_middleware(
 
 # 注册 API v1 路由
 app.include_router(api_router)
+
+# 挂载页面执行截图静态目录。前端经 Vite 代理访问 /api/static/screenshots/<file>。
+os.makedirs(settings.PLAYWRIGHT_SCREENSHOT_PATH, exist_ok=True)
+app.mount(
+    "/static/screenshots",
+    StaticFiles(directory=settings.PLAYWRIGHT_SCREENSHOT_PATH),
+    name="screenshots"
+)
+
+os.makedirs(settings.PLAYWRIGHT_TOKEN_PATH, exist_ok=True)
+app.mount(
+    "/static/tokens",
+    StaticFiles(directory=settings.PLAYWRIGHT_TOKEN_PATH),
+    name="tokens"
+)
 
 # 异常处理中间件 - 捕获所有异常包括序列化异常
 @app.middleware("http")

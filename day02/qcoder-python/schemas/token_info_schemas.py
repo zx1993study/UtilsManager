@@ -21,6 +21,7 @@ class TokenInfoBase(BaseModel):
     )
     name: Optional[str] = Field(None, description="名称")
     type: Optional[int] = Field(None, description="类型")
+    token_type: Optional[int] = Field(1, description="token类型 1api 2web")
 
 class TokenInfoCreate(TokenInfoBase):
     """Token信息创建Schema"""
@@ -42,6 +43,7 @@ class TokenInfoUpdate(TokenInfoBase):
 
 class TokenInfoList(TokenInfoBase):
     """Token信息列表Schema"""
+    token_type: Optional[int] = Field(None, description="token类型 1api 2web")
     page_num: int = Field(default=1, description="页码")
     page_size: int = Field(default=10, description="页大小")
     project_address: Optional[str] = Field(None, description="项目地址")
@@ -52,11 +54,17 @@ class TokenInfoList(TokenInfoBase):
             filter_params.append(TokenInfo.project_id == self.project_id)
         if self.type is not None:
             filter_params.append(TokenInfo.type == self.type)
+        if self.token_type is not None:
+            filter_params.append(TokenInfo.token_type == self.token_type)
         if self.project_address is not None:
             filter_params.append(ProjectInfo.project_address.contains(self.project_address))
         if self.name is not None:
             filter_params.append(TokenInfo.name.contains(self.name))
         return filter_params
+
+
+class TokenInfoIds(BaseModel):
+    ids: list[int] = Field(..., description="Token ID列表")
 
 class TokenInfoInfo(TokenInfoBase):
     """Token信息响应Schema"""
@@ -68,6 +76,13 @@ class TokenInfoInfo(TokenInfoBase):
     update_time: Optional[datetime] = Field(None, description="更新时间")
     project_id: Optional[int] = Field(None, description="项目id")
     instance_id: Optional[int] = Field(None, description="实例id")
+    api_id: Optional[int] = Field(None, description="API ID")
+    api_name: Optional[str] = Field(None, description="API名称")
+    api_instance_name: Optional[str] = Field(None, description="API实例名称")
+    page_id: Optional[int] = Field(None, description="页面ID")
+    page_name: Optional[str] = Field(None, description="页面名称")
+    page_instance_name: Optional[str] = Field(None, description="页面实例名称")
+    token: Optional[str] = Field(None, description="token")
     status: Optional[int] = Field(None, description="状态")
     remark: Optional[str] = Field(None, description="备注")
 

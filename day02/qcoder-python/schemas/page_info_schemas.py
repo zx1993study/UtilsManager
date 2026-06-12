@@ -21,8 +21,10 @@ class PageInfoBase(BaseModel):
     project_id: Optional[int] = Field(None, description="项目id")
     page_url: Optional[str] = Field(None, description="URL")
     file_name: Optional[str] = Field(None, description="功能代码文件名称")
+    real_file_name: Optional[str] = Field(None, description="功能代码文件名称")
     token_id: Optional[int] = Field(None, description="tokenId")
     function: Optional[str] = Field(None, description="功能")
+    status: Optional[int] = Field(1, description="状态")
     remark: Optional[str] = Field(None, description="备注")
 
 

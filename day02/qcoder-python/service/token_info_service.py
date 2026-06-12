@@ -10,15 +10,44 @@ from mysql.token_info_sql import (
     get_token_info_list,
     create_token_info,
     update_token_info,
-    delete_token_info
+    delete_token_info,
+    delete_token_info_batch
 )
 from mysql.api_result_sql import get_latest_result_by_instance_id
 from service.api_execute_service import execute_api_service
+from service.page_execute_service import save_token_json_by_instance
 from schemas.api_execute_schemas import ApiExecuteRequest
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
 import json
 from core.logger import logger
+
+
+async def _prepare_token_payload(db: Session, data: TokenInfoCreate | TokenInfoUpdate) -> dict:
+    """根据来源整理入库数据。web 来源会先执行页面实例并保存 token JSON。"""
+    payload = data.model_dump(by_alias=False, exclude_unset=True)
+    token_type = payload.get("token_type", getattr(data, "token_type", 1)) or 1
+
+    if token_type == 2:
+        instance_id = payload.get("instance_id", getattr(data, "instance_id", None))
+        if not instance_id:
+            raise ValueError("web来源Token必须选择页面实例")
+
+        token_file_name = payload.get("token") or getattr(data, "token", None)
+        save_result = await save_token_json_by_instance(
+            db=db,
+            page_instance_id=instance_id,
+            token_file_name=token_file_name,
+        )
+        if not save_result.get("success"):
+            error_msg = save_result.get("msg") or "保存token json失败"
+            detail = save_result.get("data") or save_result.get("error")
+            if detail:
+                error_msg = f"{error_msg}：{detail}"
+            raise ValueError(error_msg)
+        payload["token"] = save_result.get("data", {}).get("tokenFileName")
+
+    return payload
 
 
 async def get_token_info_service(db: Session, item_id: int):
@@ -72,7 +101,16 @@ async def create_token_info_service(db: Session, data: TokenInfoCreate):
             error=f'{{"errorCode": "DUPLICATE_TOKEN", "message": "项目ID为{data.project_id}的Token中，已存在名称为\'{data.name}\'的Token"}}'
         )
     
-    obj = await create_token_info(db, data.model_dump(by_alias=False))
+    try:
+        data_dict = await _prepare_token_payload(db, data)
+    except Exception as e:
+        return error_response(
+            msg=f"添加失败：{str(e)}",
+            data=None,
+            error=f'{{"errorCode": "SAVE_TOKEN_ERROR", "message": "{str(e)}"}}'
+        )
+
+    obj = await create_token_info(db, data_dict)
     
     # 将ORM对象转换为Schema对象
     schema_obj = TokenInfoInfo.model_validate(obj)
@@ -90,7 +128,16 @@ async def update_token_info_service(db: Session,  data: TokenInfoUpdate):
             error='{"errorCode": "NOT_FOUND", "message": "Token信息不存在"}'
         )
     
-    obj = await update_token_info(db, data.token_id, data.model_dump(by_alias=False, exclude_unset=True))
+    try:
+        data_dict = await _prepare_token_payload(db, data)
+    except Exception as e:
+        return error_response(
+            msg=f"更新失败：{str(e)}",
+            data=None,
+            error=f'{{"errorCode": "SAVE_TOKEN_ERROR", "message": "{str(e)}"}}'
+        )
+
+    obj = await update_token_info(db, data.token_id, data_dict)
     
     # 将ORM对象转换为Schema对象
     schema_obj = TokenInfoInfo.model_validate(obj)
@@ -114,6 +161,18 @@ async def delete_token_info_service(db: Session, item_id: int):
         msg="删除成功",
         data={"id": item_id, "message": "Token信息已删除"}
     )
+
+
+async def delete_token_info_batch_service(db: Session, ids: list[int]):
+    """批量删除Token信息"""
+    deleted = await delete_token_info_batch(db, ids)
+    if not deleted:
+        return error_response(
+            msg="批量删除失败，信息不存在",
+            data=None,
+            error='{"errorCode": "NOT_FOUND", "message": "Token信息不存在"}'
+        )
+    return success_response(msg="批量删除成功", data={"ids": ids, "deleted": deleted})
 
 
 async def refresh_token_service(db: Session, token_id: int):
@@ -146,6 +205,26 @@ async def refresh_token_service(db: Session, token_id: int):
         )
     
     try:
+        if token_info.token_type == 2:
+            save_result = await save_token_json_by_instance(
+                db=db,
+                page_instance_id=instance_id,
+                token_file_name=token_info.token,
+            )
+            if not save_result.get("success"):
+                return save_result
+
+            token_file_name = save_result.get("data", {}).get("tokenFileName")
+            await update_token_info(db, token_id, {"token": token_file_name})
+            return success_response(
+                msg="Token刷新成功",
+                data={
+                    "token_id": token_id,
+                    "token": token_file_name,
+                    "token_type": token_info.token_type
+                }
+            )
+
         # 3. 调用API执行服务，重新执行该实例
         execute_request = ApiExecuteRequest(execution_type=1, target_id=instance_id)
         execute_result = await execute_api_service(db, execute_request)

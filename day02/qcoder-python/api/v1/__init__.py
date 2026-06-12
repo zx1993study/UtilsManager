@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from . import sys_user, project_info, dict_info, api_info, api_instance, api_template, api_result, page_info, page_instance, page_result, element_template, flow_info, flow_step, flow_result, token_info, api_execute, swagger_parse, auth
+from . import sys_user, project_info, dict_info, api_info, api_instance, api_template, api_result, page_info, page_instance, page_result, page_execute, element_template, flow_info, flow_step, flow_result, token_info, api_execute, swagger_parse, auth
 
 # 创建 API v1 主路由器
 api_router = APIRouter()
@@ -16,6 +16,7 @@ api_router.include_router(api_result.router, prefix="/api/v1", tags=["API结果�
 api_router.include_router(page_info.router, prefix="/api/v1", tags=["页面信息管理"])
 api_router.include_router(page_instance.router, prefix="/api/v1", tags=["页面实例管理"])
 api_router.include_router(page_result.router, prefix="/api/v1", tags=["页面结果管理"])
+api_router.include_router(page_execute.router, prefix="/api/v1", tags=["页面执行"])
 api_router.include_router(element_template.router, prefix="/api/v1", tags=["元素模板管理"])
 api_router.include_router(flow_info.router, prefix="/api/v1", tags=["流程信息管理"])
 api_router.include_router(flow_step.router, prefix="/api/v1", tags=["流程步骤管理"])

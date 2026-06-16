@@ -27,7 +27,7 @@ async def get_flow_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "流程信息不存在"}'
         )
     
-    # 将字典转换为Schema对象
+    """将字典转换为Schema对象"""
     schema_obj = FlowInfoInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -36,10 +36,10 @@ async def get_flow_info_list_service(db: Session, filter_params: FlowInfoList):
     """获取流程信息分页列表"""
     items, total = await get_flow_info_list(db, filter_params)
     
-    # 将字典转换为Schema对象
+    """将字典转换为Schema对象"""
     schema_items = [FlowInfoInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -52,7 +52,7 @@ async def get_flow_info_list_service(db: Session, filter_params: FlowInfoList):
 
 async def create_flow_info_service(db: Session, data: FlowInfoCreate):
     """创建流程信息"""
-    # 业务逻辑校验：检查是否存在相同的flow_name和project_id组合
+    """业务逻辑校验：检查是否存在相同的flow_name和project_id组合"""
     existing = await get_flow_info_by_unique_fields(
         db, 
         flow_name=data.flow_name,
@@ -60,7 +60,7 @@ async def create_flow_info_service(db: Session, data: FlowInfoCreate):
     )
     
     if existing:
-        # 将ORM对象转换为Schema对象
+        """将ORM对象转换为Schema对象"""
         schema_existing = FlowInfoInfo.model_validate(existing)
         return error_response(
             msg="添加失败，该流程已存在",
@@ -70,14 +70,14 @@ async def create_flow_info_service(db: Session, data: FlowInfoCreate):
     
     obj = await create_flow_info(db, data.model_dump(by_alias=False))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = FlowInfoInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_flow_info_service(db: Session, data: FlowInfoUpdate):
     """更新流程信息"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_flow_info_by_id(db, data.flow_id)
     if not existing:
         return error_response(
@@ -88,14 +88,14 @@ async def update_flow_info_service(db: Session, data: FlowInfoUpdate):
     
     obj = await update_flow_info(db, data.flow_id, data.model_dump(by_alias=False, exclude_unset=True))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = FlowInfoInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
 
 async def delete_flow_info_service(db: Session, item_id: int):
     """删除流程信息（同时删除关联的步骤）"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_flow_info_by_id(db, item_id)
     if not existing:
         return error_response(
@@ -104,10 +104,10 @@ async def delete_flow_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "流程信息不存在"}'
         )
     
-    # 先删除关联的步骤
+    """先删除关联的步骤"""
     await delete_flow_steps_by_flow_id(db, item_id)
     
-    # 再删除流程
+    """再删除流程"""
     obj = await delete_flow_info(db, item_id)
     
     return success_response(

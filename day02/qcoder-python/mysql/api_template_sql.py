@@ -48,10 +48,10 @@ async def get_api_template_list(
     Returns:
         Tuple[List[dict], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (data.page_num - 1) * data.page_size
     
-    # 查询总数
+    """查询总数"""
     count_stmt = select(func.count()).select_from(ApiTemplate).join(
         ApiInfo, ApiTemplate.api_id == ApiInfo.api_id
     ).outerjoin(
@@ -59,7 +59,7 @@ async def get_api_template_list(
     ).where(*data.filter_params())
     total = db.execute(count_stmt).scalar()
     
-    # 使用JOIN查询关联api_info和project_info表
+    """使用JOIN查询关联api_info和project_info表"""
     items = db.query(
         ApiTemplate,
         ApiInfo.api_name,
@@ -71,7 +71,7 @@ async def get_api_template_list(
         ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
     ).filter(*data.filter_params()).order_by(ApiTemplate.template_id.desc(),ApiInfo.api_id.desc()).offset(offset).limit(data.page_size).all()
     
-    # 将查询结果转换为字典列表
+    """将查询结果转换为字典列表"""
     result_list = []
     for item in items:
         template = item[0]
@@ -120,7 +120,7 @@ async def batch_create_api_templates(db: Session, data_list: List[dict]) -> int:
     if not data_list:
         return 0
     
-    # 使用 bulk_insert_mappings 跳过 ORM 实例化过程，直接生成 INSERT 语句
+    """使用 bulk_insert_mappings 跳过 ORM 实例化过程，直接生成 INSERT 语句"""
     db.bulk_insert_mappings(ApiTemplate, data_list)
     db.commit()
     return len(data_list)
@@ -131,7 +131,7 @@ async def get_existing_template_fields(db: Session, api_ids: List[int]) -> set:
     if not api_ids:
         return set()
     
-    # 查询已存在的 (api_id, field_name) 组合
+    """查询已存在的 (api_id, field_name) 组合"""
     results = db.query(ApiTemplate.api_id, ApiTemplate.field_name).filter(
         ApiTemplate.api_id.in_(api_ids)
     ).all()

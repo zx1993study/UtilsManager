@@ -1,56 +1,55 @@
 import request from '@/utils/request'
 
-/**
- * 页面模板API
- */
+const baseUrl = '/api/v1/elementTemplate'
 
-// 获取页面模板列表
 export function getPageTemplateList(params) {
   return request({
-    url: '/page/template/list',
+    url: `${baseUrl}/`,
     method: 'get',
     params
   })
 }
 
-// 获取页面模板详情
-export function getPageTemplateDetail(id) {
+export function getPageTemplateByPage(pageId) {
   return request({
-    url: `/page/template/${id}`,
+    url: `${baseUrl}/page/${pageId}`,
     method: 'get'
   })
 }
 
-// 新增页面模板
+export function getPageTemplateDetail(id) {
+  return request({
+    url: `${baseUrl}/${id}`,
+    method: 'get'
+  })
+}
+
 export function addPageTemplate(data) {
   return request({
-    url: '/page/template',
+    url: `${baseUrl}/`,
     method: 'post',
     data
   })
 }
 
-// 更新页面模板
 export function updatePageTemplate(data) {
   return request({
-    url: '/page/template',
+    url: `${baseUrl}/${data.elementId}`,
     method: 'put',
     data
   })
 }
 
-// 删除页面模板
 export function deletePageTemplate(id) {
   return request({
-    url: `/page/template/${id}`,
+    url: `${baseUrl}/${id}`,
     method: 'delete'
   })
 }
 
-// 批量删除页面模板
 export function batchDeletePageTemplate(ids) {
   return request({
-    url: '/page/template/batch',
+    url: `${baseUrl}/batch`,
     method: 'delete',
     data: { ids }
   })

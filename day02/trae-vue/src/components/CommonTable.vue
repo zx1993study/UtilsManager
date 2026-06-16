@@ -1,6 +1,5 @@
 <template>
   <div class="common-table-container">
-    <!-- 搜索区域 -->
     <el-card v-if="searchFields && searchFields.length > 0" shadow="never" class="search-card">
       <el-form
         :model="searchForm"
@@ -12,13 +11,11 @@
           :key="field.prop || field.slot"
           :label="field.label"
         >
-          <!-- 自定义插槽 -->
           <slot
             v-if="field.type === 'custom' && field.slot"
             :name="field.slot"
           ></slot>
-          
-          <!-- 默认输入框 -->
+
           <el-input
             v-else-if="field.type === 'input'"
             v-model="searchForm[field.prop]"
@@ -26,11 +23,12 @@
             clearable
             style="width: 200px"
           />
-          <el-select filterable
+          <el-select
             v-else-if="field.type === 'select'"
             v-model="searchForm[field.prop]"
             :placeholder="field.placeholder || `请选择${field.label}`"
             clearable
+            filterable
             style="width: 200px"
           >
             <el-option
@@ -59,7 +57,7 @@
             style="width: 240px"
           />
         </el-form-item>
-        
+
         <el-form-item>
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>
@@ -73,7 +71,6 @@
       </el-form>
     </el-card>
 
-    <!-- 操作按钮区域 -->
     <el-card v-if="showToolbar" shadow="never" class="toolbar-card">
       <div class="toolbar">
         <div class="toolbar-left">
@@ -102,7 +99,6 @@
       </div>
     </el-card>
 
-    <!-- 表格区域 -->
     <el-card shadow="never" class="table-card">
       <el-table
         ref="tableRef"
@@ -122,7 +118,7 @@
           width="55"
           align="center"
         />
-        
+
         <el-table-column
           v-if="showIndex"
           type="index"
@@ -130,7 +126,7 @@
           width="60"
           align="center"
         />
-        
+
         <template v-for="column in columns" :key="column.prop">
           <el-table-column
             :prop="column.prop"
@@ -142,18 +138,16 @@
             :fixed="column.fixed"
           >
             <template #default="{ row }">
-              <!-- 自定义插槽 -->
               <slot
                 v-if="column.slot"
                 :name="column.slot"
                 :row="row"
                 :column="column"
               ></slot>
-              
-              <!-- 默认渲染 -->
+
               <template v-else>
                 <div>
-                  <div 
+                  <div
                     class="table-cell-content"
                     :ref="el => setCellRef(el, column.prop, row)"
                   >
@@ -164,8 +158,7 @@
             </template>
           </el-table-column>
         </template>
-        
-        <!-- 操作列 -->
+
         <el-table-column
           v-if="showOperation"
           label="操作"
@@ -184,7 +177,7 @@
               <el-icon><Edit /></el-icon>
               <span>编辑</span>
             </el-button>
-            
+
             <el-button
               v-if="showCopy"
               type="success"
@@ -195,7 +188,7 @@
               <el-icon><CopyDocument /></el-icon>
               <span>复制</span>
             </el-button>
-            
+
             <el-button
               v-if="showDelete"
               type="danger"
@@ -206,13 +199,12 @@
               <el-icon><Delete /></el-icon>
               <span>删除</span>
             </el-button>
-            
+
             <slot name="operation" :row="row"></slot>
           </template>
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
       <el-pagination
         v-if="showPagination"
         v-model:current-page="pagination.page"
@@ -233,97 +225,78 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { Search, Refresh, Plus, Delete, Edit, CopyDocument } from '@element-plus/icons-vue'
 
 const props = defineProps({
-  // 表格数据（支持直接传入或通过apiMethod获取）
   data: {
     type: Array,
     default: () => []
   },
-  // API方法（用于自动获取数据）
   apiMethod: {
     type: Function,
     default: null
   },
-  // API请求参数
   apiParams: {
     type: Object,
     default: () => ({})
   },
-  // 是否自动加载数据
   autoLoad: {
     type: Boolean,
     default: true
   },
-  // 列配置
   columns: {
     type: Array,
     required: true
   },
-  // 加载状态
   loading: {
     type: Boolean,
     default: false
   },
-  // 行唯一标识
   rowKey: {
     type: String,
     default: 'id'
   },
-  // 搜索字段配置
   searchFields: {
     type: Array,
     default: () => []
   },
-  // 是否显示选择框
   showSelection: {
     type: Boolean,
     default: false
   },
-  // 是否显示序号
   showIndex: {
     type: Boolean,
     default: true
   },
-  // 是否显示新增按钮
   showAdd: {
     type: Boolean,
     default: true
   },
-  // 是否显示编辑按钮
   showEdit: {
     type: Boolean,
     default: true
   },
-  // 是否显示复制按钮
   showCopy: {
     type: Boolean,
     default: false
   },
-  // 是否显示删除按钮
   showDelete: {
     type: Boolean,
     default: true
   },
-  // 是否显示操作列
   showOperation: {
     type: Boolean,
     default: true
   },
-  // 操作列宽度
   operationWidth: {
     type: Number,
     default: 200
   },
-  // 是否显示分页
   showPagination: {
     type: Boolean,
     default: true
   },
-  // 是否显示工具栏
   showToolbar: {
     type: Boolean,
     default: true
   },
-  // 分页配置
   pagination: {
     type: Object,
     default: () => ({
@@ -332,7 +305,6 @@ const props = defineProps({
       total: 0
     })
   },
-  // 每页条数选项
   pageSizes: {
     type: Array,
     default: () => [10, 20, 50, 100]
@@ -360,11 +332,8 @@ const searchForm = reactive({})
 const selectedRows = ref([])
 const internalLoading = ref(false)
 const tableData = ref([])
-
-// 单元格引用管理
 const cellRefs = new Map()
 
-// 设置单元格引用
 const setCellRef = (el, prop, row) => {
   if (el) {
     const key = `${prop}-${row.id || row[prop]}`
@@ -372,15 +341,6 @@ const setCellRef = (el, prop, row) => {
   }
 }
 
-// 检测文本是否溢出
-const isTextOverflow = (prop) => {
-  // 默认返回true，始终显示tooltip
-  return true
-}
-
-/**
- * 构建请求参数
- */
 const buildRequestParams = () => {
   const params = {
     pageNum: props.pagination.page,
@@ -388,67 +348,68 @@ const buildRequestParams = () => {
     ...props.apiParams,
     ...searchForm
   }
-  
-  // 过滤空值
+
   Object.keys(params).forEach(key => {
     if (params[key] === '' || params[key] === null || params[key] === undefined) {
       delete params[key]
     }
   })
-  
+
   return params
 }
 
-/**
- * 获取列表数据（核心方法）
- */
-const fetchData = async () => {
-  // 如果没有提供API方法，直接返回
-  if (!props.apiMethod) {
-    console.warn('CommonTable: apiMethod is not provided')
-    return
+const normalizeResponse = (res) => {
+  if (res?.data?.items && Array.isArray(res.data.items)) {
+    return {
+      list: res.data.items,
+      total: res.data.total || res.data.items.length
+    }
   }
-  
+
+  if (res?.data?.list && Array.isArray(res.data.list)) {
+    return {
+      list: res.data.list,
+      total: res.data.total || res.data.list.length
+    }
+  }
+
+  if (Array.isArray(res?.data)) {
+    return {
+      list: res.data,
+      total: res.data.length
+    }
+  }
+
+  return {
+    list: [],
+    total: 0
+  }
+}
+
+const fetchData = async () => {
+  if (!props.apiMethod) {
+    tableData.value = props.data || []
+    return {
+      list: tableData.value,
+      total: tableData.value.length
+    }
+  }
+
   internalLoading.value = true
-  
+
   try {
     const params = buildRequestParams()
     const res = await props.apiMethod(params)
-    
-    // 处理响应数据
-    // 处理响应数据 - 支持多种数据格式
-    let list = []
-    let total = 0
+    const { list, total } = normalizeResponse(res)
 
-    if (res.data) {
-      // 优先使用 items 字段（项目列表API返回格式）
-      if (Array.isArray(res.data.items)) {
-        list = res.data.items
-        total = res.data.total || list.length
-      } 
-      // 其次使用 list 字段
-      else if (Array.isArray(res.data.list)) {
-        list = res.data.list
-        total = res.data.total || list.length
-      }
-      // 如果 data 本身是数组
-      else if (Array.isArray(res.data)) {
-        list = res.data
-        total = list.length
-      }
-    }
-
-    // 更新内部数据
     tableData.value = list
-    
-    // 更新分页信息
+
     if (props.pagination) {
       props.pagination.total = total
     }
-    
-    // 触发数据加载完成事件
+
     emit('data-loaded', { list, total, res })
-    
+
     return { list, total }
   } catch (error) {
     console.error('CommonTable: Failed to fetch data', error)
@@ -458,16 +419,10 @@ const fetchData = async () => {
   }
 }
 
-/**
- * 刷新数据（保持当前页）
- */
 const refresh = async () => {
   return await fetchData()
 }
 
-/**
- * 重新加载数据（重置到第一页）
- */
 const reload = async () => {
   if (props.pagination) {
     props.pagination.page = 1
@@ -475,7 +430,16 @@ const reload = async () => {
   return await fetchData()
 }
 
-// 监听分页变化，自动获取数据
+watch(
+  () => props.data,
+  (value) => {
+    if (!props.apiMethod) {
+      tableData.value = value || []
+    }
+  },
+  { immediate: true, deep: true }
+)
+
 watch(
   () => [props.pagination?.page, props.pagination?.pageSize],
   () => {
@@ -486,85 +450,67 @@ watch(
   { deep: true }
 )
 
-// 组件挂载时自动加载数据
 onMounted(() => {
   if (props.apiMethod && props.autoLoad) {
     fetchData()
   }
 })
 
-// 处理搜索
 const handleSearch = () => {
   if (props.apiMethod) {
-    // 如果有API方法，重置到第一页并重新获取数据
     if (props.pagination) {
       props.pagination.page = 1
     }
     fetchData()
   } else {
-    // 否则触发搜索事件，由父组件处理
     emit('search', searchForm)
   }
 }
 
-// 处理重置
 const handleReset = () => {
-  // 清空搜索表单
   Object.keys(searchForm).forEach(key => {
     searchForm[key] = ''
   })
-  
+
   if (props.apiMethod) {
-    // 如果有API方法，重置到第一页并重新获取数据
     if (props.pagination) {
       props.pagination.page = 1
     }
     fetchData()
   } else {
-    // 否则触发重置事件，由父组件处理
     emit('reset')
   }
 }
 
-// 处理选择变化
 const handleSelectionChange = (selection) => {
   selectedRows.value = selection
   emit('selection-change', selection)
 }
 
-// 处理行点击
 const handleRowClick = (row, column, event) => {
   emit('row-click', row, column, event)
 }
 
-// 处理排序变化
 const handleSortChange = ({ column, prop, order }) => {
   emit('sort-change', { column, prop, order })
 }
 
-// 处理每页条数变化
 const handleSizeChange = (val) => {
   if (props.apiMethod) {
-    // 如果有API方法，自动获取数据
     fetchData()
   } else {
-    // 否则触发事件，由父组件处理
     emit('size-change', val)
   }
 }
 
-// 处理页码变化
 const handleCurrentChange = (val) => {
   if (props.apiMethod) {
-    // 如果有API方法，自动获取数据
     fetchData()
   } else {
-    // 否则触发事件，由父组件处理
     emit('current-change', val)
   }
 }
 
-// 暴露方法给父组件
 defineExpose({
   tableRef,
   searchForm,
@@ -610,7 +556,6 @@ defineExpose({
   margin-top: 10px;
 }
 
-/* 表格单元格内容样式 */
 .table-cell-content {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -619,7 +564,6 @@ defineExpose({
   padding: 0 4px;
 }
 
-/* 统一表格行高 */
 :deep(.el-table .el-table__row) {
   height: 48px;
 }

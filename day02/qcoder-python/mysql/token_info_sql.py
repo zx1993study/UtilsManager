@@ -57,16 +57,16 @@ async def get_token_info_list(
     Returns:
         Tuple[List[dict], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (filter.page_num - 1) * filter.page_size
     
-    # 查询总数
+    """查询总数"""
     count_stmt = select(func.count()).select_from(TokenInfo).outerjoin(
         ProjectInfo, TokenInfo.project_id == ProjectInfo.project_id
     ).where(*filter.filter_params())
     total = db.execute(count_stmt).scalar()
     
-    # 使用JOIN查询关联project_info表，并按来源补充API/页面关联信息
+    """使用JOIN查询关联project_info表，并按来源补充API/页面关联信息"""
     items = db.query(
         TokenInfo,
         ProjectInfo.project_name,
@@ -91,7 +91,7 @@ async def get_token_info_list(
         PageInfo, PageInstance.page_id == PageInfo.page_id
     ).filter(*filter.filter_params()).offset(offset).limit(filter.page_size).all()
     
-    # 将查询结果转换为字典列表
+    """将查询结果转换为字典列表"""
     result_list = []
     for item in items:
         token_info = item[0]

@@ -16,7 +16,7 @@
     <div class="content-layout">
       <el-card shadow="never" class="left-panel">
         <el-tabs v-model="leftActiveTab" class="panel-tabs">
-          <el-tab-pane label="参数json" name="params">
+          <el-tab-pane label="参数JSON" name="params">
             <div v-if="selectedInstance" class="tab-content">
               <pre class="json-content">{{ formatJson(selectedOperationJson) }}</pre>
             </div>
@@ -53,14 +53,61 @@
             </div>
             <el-empty v-else description="请选择实例" />
           </el-tab-pane>
+
+          <el-tab-pane label="元素模板" name="elements">
+            <div class="tab-content">
+              <div class="table-actions">
+                <el-button type="primary" @click="handleAddElement">
+                  <el-icon><Plus /></el-icon>
+                  <span>新增</span>
+                </el-button>
+              </div>
+
+              <common-table
+                :data="elementTemplates"
+                :columns="elementColumns"
+                :loading="elementLoading"
+                :show-toolbar="false"
+                :show-pagination="false"
+                :show-operation="true"
+                :show-edit="false"
+                :show-delete="false"
+                :show-index="false"
+                :operation-width="150"
+                row-key="elementId"
+              >
+                <template #locatorType="{ row }">
+                  <el-tag effect="plain">{{ getOptionLabel(locatorTypeOptions, row.locatorType) }}</el-tag>
+                </template>
+                <template #elementType="{ row }">
+                  <el-tag effect="plain">{{ getOptionLabel(elementTypeOptions, row.elementType) }}</el-tag>
+                </template>
+                <template #operation="{ row }">
+                  <el-button type="primary" size="small" link @click="handleEditElement(row)">
+                    <el-icon><Edit /></el-icon>
+                    <span>编辑</span>
+                  </el-button>
+                  <el-button type="danger" size="small" link @click="handleDeleteElement(row)">
+                    <el-icon><Delete /></el-icon>
+                    <span>删除</span>
+                  </el-button>
+                </template>
+              </common-table>
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </el-card>
 
       <el-card shadow="never" class="right-panel">
-        <el-tabs v-model="rightActiveTab" class="panel-tabs" @tab-change="handleRightTabChange">
+        <el-tabs v-model="rightActiveTab" class="panel-tabs">
           <el-tab-pane label="实例列表" name="instances">
             <div class="table-actions">
-              <el-button type="success" :disabled="!selectedRows.length || !realFileName" @click="handleBatchRun">
+              <el-button
+                type="success"
+                :loading="batchRunning"
+                :disabled="!selectedRows.length || batchRunning || !!runningInstanceIds.length"
+                @click="handleBatchRun"
+              >
                 <el-icon><VideoPlay /></el-icon>
                 <span>批量运行 ({{ selectedRows.length }})</span>
               </el-button>
@@ -99,45 +146,31 @@
               </template>
 
               <template #operation="{ row }">
-                <el-button type="success" size="small" link :disabled="!realFileName" @click="handleRunInstance(row)">
+                <el-button
+                  type="success"
+                  size="small"
+                  link
+                  :loading="isInstanceRunning(row.pageInstanceId)"
+                  :disabled="isInstanceRunning(row.pageInstanceId)"
+                  @click.stop="handleRunInstance(row)"
+                >
                   <el-icon><VideoPlay /></el-icon>
                   <span>运行</span>
                 </el-button>
-                <el-button type="primary" size="small" link @click="handleEditInstance(row)">
+                <el-button type="primary" size="small" link @click.stop="handleEditInstance(row)">
                   <el-icon><Edit /></el-icon>
                   <span>编辑</span>
                 </el-button>
-                <el-button type="danger" size="small" link @click="handleDeleteInstance(row)">
+                <el-button type="primary" size="small" link @click.stop="handleCopyInstance(row)">
+                  <el-icon><Plus /></el-icon>
+                  <span>复制</span>
+                </el-button>
+                <el-button type="danger" size="small" link @click.stop="handleDeleteInstance(row)">
                   <el-icon><Delete /></el-icon>
                   <span>删除</span>
                 </el-button>
               </template>
             </common-table>
-          </el-tab-pane>
-
-          <el-tab-pane label="脚本内容" name="script">
-            <div class="script-toolbar">
-              <el-button type="primary" :disabled="!realFileName" @click="scriptEditable = true">
-                <el-icon><Edit /></el-icon>
-                <span>编辑</span>
-              </el-button>
-              <el-button type="success" :disabled="!realFileName || !scriptEditable" @click="handleSaveScript">
-                <el-icon><Check /></el-icon>
-                <span>保存</span>
-              </el-button>
-              <el-button type="danger" :disabled="!realFileName" @click="handleDeleteScript">
-                <el-icon><Delete /></el-icon>
-                <span>删除</span>
-              </el-button>
-            </div>
-            <el-input
-              v-model="scriptContent"
-              type="textarea"
-              :rows="24"
-              :disabled="!scriptEditable"
-              placeholder="暂无脚本内容"
-              class="script-editor"
-            />
           </el-tab-pane>
         </el-tabs>
       </el-card>
@@ -174,22 +207,68 @@
         </el-radio-group>
       </el-form-item>
     </common-dialog>
+
+    <common-dialog
+      v-model="elementDialogVisible"
+      :title="elementDialogTitle"
+      :form-data="elementForm"
+      :rules="elementRules"
+      :loading="elementSubmitLoading"
+      width="760px"
+      @confirm="handleSubmitElement"
+    >
+      <el-form-item label="元素名称" prop="elementName">
+        <el-input v-model="elementForm.elementName" placeholder="请输入元素名称" clearable />
+      </el-form-item>
+      <el-form-item label="定位器类型" prop="locatorType">
+        <el-select v-model="elementForm.locatorType" placeholder="请选择定位器类型" style="width: 100%">
+          <el-option v-for="item in locatorTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="元素类型" prop="elementType">
+        <el-select v-model="elementForm.elementType" placeholder="请选择元素类型" style="width: 100%">
+          <el-option v-for="item in elementTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="操作" prop="operation">
+        <el-select v-model="elementForm.operation" placeholder="请选择操作" style="width: 100%">
+          <el-option v-for="item in operationOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="元素定位值" prop="elementValue">
+        <el-input
+          v-model="elementForm.elementValue"
+          type="textarea"
+          :rows="5"
+          placeholder='例如 {"locatorType":5,"selector":"#submit","value":"#submit"}'
+        />
+      </el-form-item>
+      <el-form-item label="备注" prop="remark">
+        <el-input
+          v-model="elementForm.remark"
+          type="textarea"
+          :rows="4"
+          placeholder='可保存参数key，例如 {"paramKey":"username","defaultValue":"admin"}'
+        />
+      </el-form-item>
+      <el-form-item label="状态" prop="status">
+        <el-radio-group v-model="elementForm.status">
+          <el-radio :label="1">启用</el-radio>
+          <el-radio :label="0">禁用</el-radio>
+        </el-radio-group>
+      </el-form-item>
+    </common-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Back, Check, Delete, Edit, Plus, VideoPlay } from '@element-plus/icons-vue'
+import { Back, Delete, Edit, Plus, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CommonDialog from '@/components/CommonDialog.vue'
 import CommonTable from '@/components/CommonTable.vue'
-import {
-  deleteExecuteFile,
-  getExecuteFile,
-  getPageFunctionDetail,
-  updateExecuteFile
-} from '@/api/page/page-function'
+import { getPageFunctionDetail } from '@/api/page/page-function'
 import {
   addPageTestCase,
   batchDeletePageTestCase,
@@ -199,6 +278,12 @@ import {
   getPageTestCaseList,
   updatePageTestCase
 } from '@/api/page/page-testcase'
+import {
+  addPageTemplate,
+  deletePageTemplate,
+  getPageTemplateByPage,
+  updatePageTemplate
+} from '@/api/page/page-template'
 import { getLatestPageResultByInstance } from '@/api/page/page-result'
 import { handleApiResponse } from '@/utils/responseHandler'
 
@@ -209,22 +294,25 @@ const instanceTableRef = ref(null)
 const selectedRows = ref([])
 const selectedInstance = ref(null)
 const latestResult = ref(null)
-const leftActiveTab = ref('params')
+const elementTemplates = ref([])
+const elementLoading = ref(false)
+const elementSubmitLoading = ref(false)
+const runningInstanceIds = ref([])
+const batchRunning = ref(false)
+const leftActiveTab = ref('elements')
 const rightActiveTab = ref('instances')
-const scriptContent = ref('')
-const scriptEditable = ref(false)
-const scriptLoaded = ref(false)
 const submitLoading = ref(false)
 const instanceDialogVisible = ref(false)
 const instanceDialogTitle = ref('')
 const instanceMode = ref('add')
+const elementDialogVisible = ref(false)
+const elementDialogTitle = ref('')
+const elementMode = ref('add')
 
 const pageInfo = reactive({
   pageId,
   pageName: route.query.pageName || '',
-  pageUrl: route.query.pageUrl || '',
-  realFileName: '',
-  fileName: ''
+  pageUrl: route.query.pageUrl || ''
 })
 
 const pagination = reactive({
@@ -250,26 +338,140 @@ const instanceRules = {
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
+const elementForm = reactive({
+  elementId: null,
+  elementName: '',
+  pageId,
+  locatorType: 5,
+  elementValue: '',
+  elementType: 1,
+  operation: 1,
+  remark: '',
+  status: 1
+})
+
+const elementRules = {
+  elementName: [{ required: true, message: '请输入元素名称', trigger: 'blur' }],
+  locatorType: [{ required: true, message: '请选择定位器类型', trigger: 'change' }],
+  elementValue: [{ required: true, message: '请输入元素定位值', trigger: 'blur' }],
+  elementType: [{ required: true, message: '请选择元素类型', trigger: 'change' }],
+  operation: [{ required: true, message: '请选择操作', trigger: 'change' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
+}
+
 const instanceColumns = [
   { prop: 'instanceName', label: '实例名称', minWidth: 150 },
   { prop: 'expectResult', label: '预期结果', minWidth: 150 },
   { prop: 'description', label: '描述', minWidth: 180 },
   { prop: 'remark', label: '备注', minWidth: 160 },
+  { prop: 'execCount', label: '执行次数', width: 100 },
   { prop: 'status', label: '状态', width: 90, slot: 'status' }
 ]
 
-const realFileName = computed(() => pageInfo.realFileName || pageInfo.fileName)
+const locatorTypeOptions = [
+  { label: 'role', value: 1 },
+  { label: 'placeholder', value: 2 },
+  { label: 'text', value: 3 },
+  { label: 'listitem_text', value: 4 },
+  { label: 'CSS', value: 5 },
+  { label: 'label', value: 6 }
+]
+
+const elementTypeOptions = [
+  { label: '文本框', value: 1 },
+  { label: '下拉框', value: 2 },
+  { label: '按钮', value: 3 },
+  { label: '文本/选项', value: 4 }
+]
+
+const operationOptions = [
+  { label: '点击', value: 1 },
+  { label: '填写', value: 2 },
+  { label: '选择', value: 3 },
+  { label: '上传文件', value: 4 }
+]
+
+const elementColumns = [
+  { prop: 'elementId', label: '序号', width: 90 },
+  { prop: 'elementName', label: '元素名称', minWidth: 120 },
+  { prop: 'locatorType', label: '定位器', width: 120, slot: 'locatorType' },
+  { prop: 'elementType', label: '元素类型', width: 110, slot: 'elementType' },
+  { prop: 'elementValue', label: '定位值', minWidth: 220, showOverflowTooltip: true },
+  { prop: 'remark', label: '备注', minWidth: 160, showOverflowTooltip: true }
+]
+
+const getOptionLabel = (options, value) => {
+  return options.find(item => item.value === value)?.label || value || '-'
+}
+
 const screenshotList = computed(() => latestResult.value?.screenshotPath || [])
 const screenshotUrls = computed(() => screenshotList.value.map(buildScreenshotUrl))
 const selectedOperationJson = computed(() => {
   return selectedInstance.value?.operationJson ?? selectedInstance.value?.operation_json ?? ''
 })
 
+const isInstanceRunning = (id) => runningInstanceIds.value.includes(id)
+
+const setInstanceRunning = (id, running) => {
+  runningInstanceIds.value = running
+    ? [...new Set([...runningInstanceIds.value, id])]
+    : runningInstanceIds.value.filter(item => item !== id)
+}
+
 const getInstanceList = (params) => {
   return getPageTestCaseList({
     ...params,
     pageId
   })
+}
+
+const parseRemark = (value) => {
+  if (!value) return null
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch (error) {
+    return null
+  }
+}
+
+const hasNthRemark = (remark) => {
+  if (Array.isArray(remark)) {
+    return remark.some(item => item && Object.prototype.hasOwnProperty.call(item, 'nth'))
+  }
+  return !!remark && typeof remark === 'object' && Object.prototype.hasOwnProperty.call(remark, 'nth')
+}
+
+const getNthRemarkValue = (remark) => {
+  if (Array.isArray(remark)) {
+    const item = remark.find(row => row && Object.prototype.hasOwnProperty.call(row, 'nth'))
+    return item ? item.nth : ''
+  }
+  if (remark && typeof remark === 'object' && Object.prototype.hasOwnProperty.call(remark, 'nth')) {
+    return remark.nth
+  }
+  return ''
+}
+
+const buildAutoOperationJson = () => {
+  const result = {}
+  const usedKeys = new Set()
+  elementTemplates.value.forEach(item => {
+    const remark = parseRemark(item.remark)
+    const needParam = item.operation === 2 || item.operation === 4 || hasNthRemark(remark)
+    if (!needParam) return
+
+    const baseKey = item.elementName || item.element_name || `element_${item.elementId || item.element_id || ''}`
+    const key = usedKeys.has(baseKey) ? `${baseKey}#${item.elementId || item.element_id}` : baseKey
+    usedKeys.add(key)
+    result[key] = hasNthRemark(remark) ? getNthRemarkValue(remark) : ''
+  })
+  const lastTemplate = elementTemplates.value[elementTemplates.value.length - 1]
+  const lastElementId = lastTemplate?.elementId || lastTemplate?.element_id
+  if (lastElementId) {
+    const numericElementId = Number(lastElementId)
+    result.screenAfter = [Number.isNaN(numericElementId) ? lastElementId : numericElementId]
+  }
+  return JSON.stringify(result, null, 2)
 }
 
 const loadPageInfo = async () => {
@@ -279,32 +481,11 @@ const loadPageInfo = async () => {
       Object.assign(pageInfo, {
         pageId: res.data.pageId,
         pageName: res.data.pageName || pageInfo.pageName,
-        pageUrl: res.data.pageUrl || pageInfo.pageUrl,
-        fileName: res.data.fileName || '',
-        realFileName: res.data.realFileName || ''
+        pageUrl: res.data.pageUrl || pageInfo.pageUrl
       })
     }
   } catch (error) {
-    console.error('加载页面功能详情失败:', error)
-  }
-}
-
-const loadScriptContent = async () => {
-  if (!realFileName.value || scriptLoaded.value) {
-    return
-  }
-  try {
-    const res = await getExecuteFile(realFileName.value)
-    if (res.success) {
-      scriptContent.value = res.data?.content || res.data?.fileContent || res.data?.文件内容 || ''
-      scriptLoaded.value = true
-      scriptEditable.value = false
-    } else {
-      scriptContent.value = ''
-    }
-  } catch (error) {
-    scriptContent.value = ''
-    console.error('读取脚本内容失败:', error)
+      console.error('加载页面功能详情失败:', error)
   }
 }
 
@@ -321,9 +502,101 @@ const loadLatestResult = async () => {
   }
 }
 
-const handleRightTabChange = (tabName) => {
-  if (tabName === 'script') {
-    loadScriptContent()
+const loadElementTemplates = async () => {
+  elementLoading.value = true
+  try {
+    const res = await getPageTemplateByPage(pageId)
+    elementTemplates.value = res.success ? (res.data || []) : []
+  } catch (error) {
+    elementTemplates.value = []
+    console.error('加载元素模板失败:', error)
+  } finally {
+    elementLoading.value = false
+  }
+}
+
+const resetElementForm = () => {
+  Object.assign(elementForm, {
+    elementId: null,
+    elementName: '',
+    pageId,
+    locatorType: 5,
+    elementValue: '',
+    elementType: 1,
+    operation: 1,
+    remark: '',
+    status: 1
+  })
+}
+
+const fillElementForm = (row) => {
+  Object.assign(elementForm, {
+    elementId: row.elementId,
+    elementName: row.elementName || '',
+    pageId,
+    locatorType: row.locatorType ?? 5,
+    elementValue: row.elementValue || '',
+    elementType: row.elementType ?? 1,
+    operation: row.operation ?? 1,
+    remark: row.remark || '',
+    status: row.status ?? 1
+  })
+}
+
+const buildElementPayload = () => ({
+  elementName: elementForm.elementName,
+  pageId,
+  locatorType: elementForm.locatorType,
+  elementValue: elementForm.elementValue,
+  elementType: elementForm.elementType,
+  operation: elementForm.operation,
+  remark: elementForm.remark,
+  status: elementForm.status
+})
+
+const handleAddElement = () => {
+  elementMode.value = 'add'
+  elementDialogTitle.value = '新增元素模板'
+  resetElementForm()
+  elementDialogVisible.value = true
+}
+
+const handleEditElement = (row) => {
+  elementMode.value = 'edit'
+  elementDialogTitle.value = '编辑元素模板'
+  resetElementForm()
+  fillElementForm(row)
+  elementDialogVisible.value = true
+}
+
+const handleDeleteElement = (row) => {
+  ElMessageBox.confirm(`确定要删除元素模板「${row.elementName}」吗？`, '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    const res = await deletePageTemplate(row.elementId)
+    if (handleApiResponse(res, '删除成功', '删除失败')) {
+      await loadElementTemplates()
+    }
+  }).catch(() => {})
+}
+
+const handleSubmitElement = async () => {
+  elementSubmitLoading.value = true
+  try {
+    const res = elementMode.value === 'edit'
+      ? await updatePageTemplate({ elementId: elementForm.elementId, ...buildElementPayload() })
+      : await addPageTemplate(buildElementPayload())
+
+    if (handleApiResponse(res, elementMode.value === 'edit' ? '编辑成功' : '新增成功', '提交失败')) {
+      elementDialogVisible.value = false
+      await loadElementTemplates()
+    }
+  } catch (error) {
+    console.error('提交元素模板失败:', error)
+  } finally {
+    elementSubmitLoading.value = false
   }
 }
 
@@ -337,50 +610,58 @@ const handleViewInstance = (row) => {
 }
 
 const handleRunInstance = (row) => {
-  if (!realFileName.value) {
-    ElMessage.warning('缺少脚本文件')
+  if (isInstanceRunning(row.pageInstanceId) || batchRunning.value) {
     return
   }
-  ElMessageBox.confirm(`确定要运行实例"${row.instanceName}"吗？`, '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'info'
-  }).then(async () => {
-    const res = await executePageTestCase(realFileName.value, row.pageInstanceId)
-    if (handleApiResponse(res, '运行成功', '运行失败')) {
-      selectedInstance.value = row
-      leftActiveTab.value = 'result'
-      await loadLatestResult()
-      instanceTableRef.value?.refresh()
-    }
-  }).catch(() => {})
+  setInstanceRunning(row.pageInstanceId, true)
+  executePageTestCase(pageId, row.pageInstanceId)
+    .then(async (res) => {
+      if (handleApiResponse(res, '运行成功', '运行失败')) {
+        selectedInstance.value = row
+        leftActiveTab.value = 'result'
+        await loadLatestResult()
+        instanceTableRef.value?.refresh()
+      }
+    })
+    .finally(() => {
+      setInstanceRunning(row.pageInstanceId, false)
+    })
 }
 
 const handleBatchRun = () => {
+  if (batchRunning.value || runningInstanceIds.value.length) {
+    return
+  }
   if (!selectedRows.value.length) {
     ElMessage.warning('请选择要运行的实例')
     return
   }
-  if (!realFileName.value) {
-    ElMessage.warning('缺少脚本文件')
-    return
-  }
+  batchRunning.value = true
+  const ids = selectedRows.value.map(row => row.pageInstanceId)
+  runningInstanceIds.value = ids
   ElMessageBox.confirm(`确定要运行选中的 ${selectedRows.value.length} 个实例吗？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'info'
   }).then(async () => {
-    const ids = selectedRows.value.map(row => row.pageInstanceId)
-    const res = await batchExecutePageTestCase(realFileName.value, ids)
-    if (handleApiResponse(res, '批量运行成功', '批量运行失败')) {
-      instanceTableRef.value?.refresh()
-      instanceTableRef.value?.clearSelection()
-      selectedRows.value = []
-      if (selectedInstance.value) {
-        await loadLatestResult()
+    try {
+      const res = await batchExecutePageTestCase(pageId, ids)
+      if (handleApiResponse(res, '批量运行成功', '批量运行失败')) {
+        instanceTableRef.value?.refresh()
+        instanceTableRef.value?.clearSelection()
+        selectedRows.value = []
+        if (selectedInstance.value) {
+          await loadLatestResult()
+        }
       }
+    } finally {
+      batchRunning.value = false
+      runningInstanceIds.value = []
     }
-  }).catch(() => {})
+  }).catch(() => {
+    batchRunning.value = false
+    runningInstanceIds.value = []
+  })
 }
 
 const resetInstanceForm = () => {
@@ -396,10 +677,14 @@ const resetInstanceForm = () => {
   })
 }
 
-const handleAddInstance = () => {
+const handleAddInstance = async () => {
   instanceMode.value = 'add'
   instanceDialogTitle.value = '新增实例'
   resetInstanceForm()
+  if (!elementTemplates.value.length) {
+    await loadElementTemplates()
+  }
+  instanceForm.operationJson = buildAutoOperationJson()
   instanceDialogVisible.value = true
 }
 
@@ -420,8 +705,25 @@ const handleEditInstance = (row) => {
   instanceDialogVisible.value = true
 }
 
+const handleCopyInstance = (row) => {
+  instanceMode.value = 'copy'
+  instanceDialogTitle.value = '复制实例'
+  resetInstanceForm()
+  Object.assign(instanceForm, {
+    pageInstanceId: null,
+    pageId,
+    instanceName: `${row.instanceName || ''}_复制`,
+    operationJson: row.operationJson ?? row.operation_json ?? '',
+    expectResult: row.expectResult || '',
+    description: row.description || '',
+    remark: row.remark || '',
+    status: row.status ?? 1
+  })
+  instanceDialogVisible.value = true
+}
+
 const handleDeleteInstance = (row) => {
-  ElMessageBox.confirm(`确定要删除实例"${row.instanceName}"吗？`, '提示', {
+  ElMessageBox.confirm(`确定要删除实例「${row.instanceName}」吗？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
@@ -473,11 +775,13 @@ const handleSubmitInstance = async () => {
       remark: instanceForm.remark,
       status: instanceForm.status
     }
-    const res = instanceMode.value === 'edit'
+    const isEdit = instanceMode.value === 'edit'
+    const res = isEdit
       ? await updatePageTestCase({ ...payload, pageInstanceId: instanceForm.pageInstanceId })
       : await addPageTestCase(payload)
 
-    if (handleApiResponse(res, instanceMode.value === 'edit' ? '编辑成功' : '新增成功', '提交失败')) {
+    const successMessage = isEdit ? '编辑成功' : (instanceMode.value === 'copy' ? '复制成功' : '新增成功')
+    if (handleApiResponse(res, successMessage, '提交失败')) {
       instanceDialogVisible.value = false
       instanceTableRef.value?.refresh()
     }
@@ -486,35 +790,6 @@ const handleSubmitInstance = async () => {
   } finally {
     submitLoading.value = false
   }
-}
-
-const handleSaveScript = async () => {
-  if (!realFileName.value) {
-    return
-  }
-  const res = await updateExecuteFile(realFileName.value, scriptContent.value)
-  if (handleApiResponse(res, '保存成功', '保存失败')) {
-    scriptEditable.value = false
-    scriptLoaded.value = true
-  }
-}
-
-const handleDeleteScript = () => {
-  if (!realFileName.value) {
-    return
-  }
-  ElMessageBox.confirm(`确定要删除脚本"${realFileName.value}"吗？`, '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning'
-  }).then(async () => {
-    const res = await deleteExecuteFile(realFileName.value)
-    if (handleApiResponse(res, '删除成功', '删除失败')) {
-      scriptContent.value = ''
-      scriptEditable.value = false
-      scriptLoaded.value = true
-    }
-  }).catch(() => {})
 }
 
 const formatJson = (value) => {
@@ -536,17 +811,15 @@ watch(selectedInstance, () => {
   loadLatestResult()
 })
 
-watch(realFileName, () => {
-  scriptLoaded.value = false
-  scriptEditable.value = false
-  scriptContent.value = ''
-  if (rightActiveTab.value === 'script') {
-    loadScriptContent()
+watch(leftActiveTab, (tabName) => {
+  if (tabName === 'elements') {
+    loadElementTemplates()
   }
 })
 
 onMounted(async () => {
   await loadPageInfo()
+  await loadElementTemplates()
   instanceTableRef.value?.refresh()
 })
 </script>
@@ -659,3 +932,4 @@ onMounted(async () => {
   font-family: Consolas, 'Courier New', monospace;
 }
 </style>
+

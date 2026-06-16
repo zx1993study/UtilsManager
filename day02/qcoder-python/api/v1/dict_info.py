@@ -6,38 +6,29 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.dict_info_schemas import DictInfoCreate, DictInfoUpdate, DictInfoInfo
+from schemas.dict_info_schemas import DictInfoCreate, DictInfoIds, DictInfoList, DictInfoUpdate, DictInfoInfo
 from service.dict_info_service import (
     get_dict_info_service,
     get_dict_info_list_service,
     create_dict_info_service,
     update_dict_info_service,
-    delete_dict_info_service
+    delete_dict_info_service,
+    delete_dict_info_batch_service
 )
 
-router = APIRouter(prefix="/dictInfo", tags=["字典信息"])
+router = APIRouter()
 
 
-@router.get("/", response_model=dict)
+@router.get("/dictInfo", response_model=dict)
 async def list_dict_info(
-    page_num: int = Query(default=1, ge=1, description="页码"),
-    page_size: int = Query(default=10, ge=1, le=100, description="每页大小"),
+    search_params: DictInfoList = Depends(),
     db: Session = Depends(get_db)
 ):
     """获取字典信息分页列表"""
-    return await get_dict_info_list_service(db, page_num, page_size)
+    return await get_dict_info_list_service(db, search_params)
 
 
-@router.get("/{item_id}", response_model=dict)
-async def get_dict_info(
-    item_id: int,
-    db: Session = Depends(get_db)
-):
-    """获取字典信息详情"""
-    return await get_dict_info_service(db, item_id)
-
-
-@router.post("/", response_model=dict)
+@router.post("/dictInfo", response_model=dict)
 async def create_dict_info(
     data: DictInfoCreate,
     db: Session = Depends(get_db)
@@ -46,17 +37,34 @@ async def create_dict_info(
     return await create_dict_info_service(db, data)
 
 
-@router.put("/{item_id}", response_model=dict)
+@router.put("/dictInfo", response_model=dict)
 async def update_dict_info(
-    item_id: int,
     data: DictInfoUpdate,
     db: Session = Depends(get_db)
 ):
     """更新字典信息"""
-    return await update_dict_info_service(db, item_id, data)
+    return await update_dict_info_service(db, data.dict_id, data)
 
 
-@router.delete("/{item_id}", response_model=dict)
+@router.delete("/dictInfo/batch", response_model=dict)
+async def delete_dict_info_batch(
+    data: DictInfoIds,
+    db: Session = Depends(get_db)
+):
+    """批量删除字典信息"""
+    return await delete_dict_info_batch_service(db, data.ids)
+
+
+@router.get("/dictInfo/{item_id}", response_model=dict)
+async def get_dict_info(
+    item_id: int,
+    db: Session = Depends(get_db)
+):
+    """获取字典信息详情"""
+    return await get_dict_info_service(db, item_id)
+
+
+@router.delete("/dictInfo/{item_id}", response_model=dict)
 async def delete_dict_info(
     item_id: int,
     db: Session = Depends(get_db)

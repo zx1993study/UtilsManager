@@ -56,7 +56,7 @@ async def get_instances_by_api_id(db: Session, api_id: int) -> List[ApiInstance]
 
 async def get_instances_by_project_id(db: Session, project_id: int) -> List[ApiInstance]:
     """根据项目ID获取该项目下所有API的所有实例"""
-    # 先查出项目下所有的api_id
+    """先查出项目下所有的api_id"""
     api_ids = db.query(ApiInfo.api_id).filter(ApiInfo.project_id == project_id).all()
     api_id_list = [aid[0] for aid in api_ids]
     

@@ -78,10 +78,10 @@ async def get_flow_info_list(
     Returns:
         Tuple[List[dict], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (filter_params.page_num - 1) * filter_params.page_size
     
-    # 构建查询条件
+    """构建查询条件"""
     conditions = []
     if filter_params.flow_name:
         conditions.append(FlowInfo.flow_name.like(f"%{filter_params.flow_name}%"))
@@ -90,13 +90,13 @@ async def get_flow_info_list(
     if filter_params.flow_type is not None:
         conditions.append(FlowInfo.flow_type == filter_params.flow_type)
     
-    # 查询总数
+    """查询总数"""
     count_stmt = select(func.count()).select_from(FlowInfo)
     if conditions:
         count_stmt = count_stmt.where(and_(*conditions))
     total = db.execute(count_stmt).scalar()
     
-    # 查询分页数据（关联ProjectInfo）
+    """查询分页数据（关联ProjectInfo）"""
     stmt = select(
         FlowInfo,
         ProjectInfo.project_name,
@@ -112,7 +112,7 @@ async def get_flow_info_list(
     
     result = db.execute(stmt).all()
     
-    # 转换为字典列表
+    """转换为字典列表"""
     items = []
     for row in result:
         flow_info = row[0]

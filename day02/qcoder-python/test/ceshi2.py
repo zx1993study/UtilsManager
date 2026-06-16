@@ -15,7 +15,7 @@ def run(playwright: Playwright) -> None:
     page.get_by_text("活动管理").dblclick()
     page.get_by_text("活动管理").click()
     page.get_by_role("link", name="活动方案").click()
-    page.get_by_role("button", name="更多 ").click()
+    page.get_by_role("button", name="更多").click()
     page.get_by_text("新增").click()
     page.get_by_role("dialog", name="添加活动").get_by_placeholder("请输入活动名称").fill("测试3")
     page.get_by_role("dialog", name="添加活动").get_by_placeholder("请选择活动类型").click()
@@ -23,7 +23,7 @@ def run(playwright: Playwright) -> None:
     page.get_by_role("textbox", name="可申请开始日期").fill("2024-07-01")
     page.get_by_role("textbox", name="可申请结束日期").fill("2024-07-31")
     page.wait_for_timeout(30000)
-    # ---------------------
+    """---------------------"""
     context.close()
     browser.close()
 

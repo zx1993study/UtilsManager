@@ -26,7 +26,7 @@ async def get_project_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "项目信息不存在"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ProjectInfoInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -35,10 +35,10 @@ async def get_project_info_list_service(db: Session, page_num: int = 1, page_siz
     """获取项目信息分页列表"""
     items, total = await get_project_info_list(db, page_num, page_size)
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_items = [ProjectInfoInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -51,14 +51,14 @@ async def get_project_info_list_service(db: Session, page_num: int = 1, page_siz
 
 async def create_project_info_service(db: Session, data: ProjectInfoCreate):
     """创建项目信息"""
-    # 业务逻辑校验：检查是否存在相同的project_address
+    """业务逻辑校验：检查是否存在相同的project_address"""
     existing = await get_project_info_by_unique_fields(
         db, 
         project_address=data.project_address
     )
     
     if existing:
-        # 将ORM对象转换为Schema对象
+        """将ORM对象转换为Schema对象"""
         schema_existing = ProjectInfoInfo.model_validate(existing)
         return error_response(
             msg="添加失败，该项目已存在",
@@ -68,14 +68,14 @@ async def create_project_info_service(db: Session, data: ProjectInfoCreate):
     
     obj = await create_project_info(db, data.model_dump(by_alias=False))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ProjectInfoInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_project_info_service(db: Session, data: ProjectInfoUpdate):
     """更新项目信息"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_project_info_by_id(db, data.project_id)
     if not existing:
         return error_response(
@@ -84,7 +84,7 @@ async def update_project_info_service(db: Session, data: ProjectInfoUpdate):
             error='{"errorCode": "NOT_FOUND", "message": "项目信息不存在"}'
         )
     
-    # 如果修改了项目地址，需要校验唯一性
+    """如果修改了项目地址，需要校验唯一性"""
     if data.project_address and data.project_address != existing.project_address:
         duplicate = await get_project_info_by_unique_fields(
             db, 
@@ -92,7 +92,7 @@ async def update_project_info_service(db: Session, data: ProjectInfoUpdate):
         )
         
         if duplicate:
-            # 将ORM对象转换为Schema对象
+            """将ORM对象转换为Schema对象"""
             schema_duplicate = ProjectInfoInfo.model_validate(duplicate)
             return error_response(
                 msg="更新失败，该项目已存在",
@@ -102,14 +102,14 @@ async def update_project_info_service(db: Session, data: ProjectInfoUpdate):
     
     obj = await update_project_info(db, data.project_id, data.model_dump(by_alias=False, exclude_unset=True))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ProjectInfoInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
 
 async def delete_project_info_service(db: Session, item_id: int):
     """删除项目信息"""
-    # 校验是否存在
+    """校验是否存在"""
     obj = await delete_project_info(db, item_id)
     if not obj:
         return error_response(

@@ -23,13 +23,13 @@ async def get_flow_result_list(
     Returns:
         Tuple[List[FlowResult], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (page_num - 1) * page_size
     
-    # 查询总数
+    """查询总数"""
     total = db.query(func.count(FlowResult.result_id)).scalar()
     
-    # 查询分页数据
+    """查询分页数据"""
     items = db.query(FlowResult).offset(offset).limit(page_size).all()
     
     return items, total

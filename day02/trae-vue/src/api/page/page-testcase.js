@@ -1,5 +1,19 @@
 import request from '@/utils/request'
 
+const executingRequests = new Map()
+const EXECUTE_TIMEOUT = 10 * 60 * 1000
+
+function executeOnce(key, requestFactory) {
+  if (executingRequests.has(key)) {
+    return executingRequests.get(key)
+  }
+  const promise = requestFactory().finally(() => {
+    executingRequests.delete(key)
+  })
+  executingRequests.set(key, promise)
+  return promise
+}
+
 /**
  * 页面测试用例API
  */
@@ -65,19 +79,26 @@ export function batchDeletePageTestCase(ids) {
 export const batchDeletePageTestcase = batchDeletePageTestCase
 
 // 执行页面测试用例
-export function executePageTestCase(filePath, id) {
-  return request({
-    url: '/api/v1/page/execute',
+export function executePageTestCase(pageId, id) {
+  const requestId = `page-run-${pageId}-${id}-${Date.now()}`
+  const key = `page:${pageId}:instances:${id}`
+  return executeOnce(key, () => request({
+    url: '/api/v1/page/execute_by_template',
     method: 'post',
-    data: { filePath, instanceIds: [id] }
-  })
+    data: { pageId, instanceIds: [id], requestId },
+    timeout: EXECUTE_TIMEOUT
+  }))
 }
 
 // 批量执行页面测试用例
-export function batchExecutePageTestCase(filePath, ids) {
-  return request({
-    url: '/api/v1/page/execute',
+export function batchExecutePageTestCase(pageId, ids) {
+  const instanceIds = [...new Set((ids || []).filter(id => id !== null && id !== undefined))]
+  const requestId = `page-run-${pageId}-${instanceIds.join('-')}-${Date.now()}`
+  const key = `page:${pageId}:instances:${instanceIds.join(',')}`
+  return executeOnce(key, () => request({
+    url: '/api/v1/page/execute_by_template',
     method: 'post',
-    data: { filePath, instanceIds: ids }
-  })
+    data: { pageId, instanceIds, requestId },
+    timeout: EXECUTE_TIMEOUT
+  }))
 }

@@ -1,8 +1,9 @@
 import request from '@/utils/request'
 
 /**
- * 页面功能API
+ * 页面功能 API
  */
+const inspectRequests = new Map()
 
 // 获取页面功能列表
 export function getPageFunctionList(params) {
@@ -56,45 +57,31 @@ export function batchDeletePageFunction(ids) {
   })
 }
 
-//生成playwright脚本
-export function generatePlaywrightScript(id) {
-  return request({
-    url: `/api/v1/page/bash/generate/${id}`,
-    method: 'post'
+// 解析页面元素
+export function inspectPageElements(id, options = {}) {
+  const requestKey = String(id)
+  if (inspectRequests.has(requestKey)) {
+    return inspectRequests.get(requestKey)
+  }
+
+  const requestId = options.requestId || `page-inspect-${id}-${Date.now()}`
+  const promise = request({
+    url: '/api/v1/page/inspect',
+    method: 'post',
+    timeout: 0,
+    data: {
+      pageId: id,
+      replace: options.replace ?? true,
+      headless: options.headless ?? true,
+      pageUrl: options.pageUrl,
+      requestId
+    }
+  }).finally(() => {
+    inspectRequests.delete(requestKey)
   })
+
+  inspectRequests.set(requestKey, promise)
+  return promise
 }
 
-// 结束playwright脚本录制
-export function stopGeneratePlaywrightScript(id) {
-  return request({
-    url: `/api/v1/page/bash/generate/${id}/stop`,
-    method: 'post'
-  })
-}
 
-// 获取页面执行脚本文件
-export function getExecuteFile(filePath) {
-  return request({
-    url: '/api/v1/page/get_execute_file',
-    method: 'get',
-    params: { filePath }
-  })
-}
-
-// 更新页面执行脚本文件
-export function updateExecuteFile(filePath, content) {
-  return request({
-    url: '/api/v1/page/update_execute_file',
-    method: 'put',
-    data: { filePath, content }
-  })
-}
-
-// 删除页面执行脚本文件
-export function deleteExecuteFile(filePath) {
-  return request({
-    url: '/api/v1/page/delete_execute_file',
-    method: 'delete',
-    params: { filePath }
-  })
-}

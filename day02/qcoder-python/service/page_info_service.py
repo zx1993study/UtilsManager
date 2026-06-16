@@ -19,6 +19,7 @@ from mysql.page_instance_sql import (
     delete_page_instance_by_page_ids,
 )
 from mysql.page_result_sql import delete_page_result_by_instance_ids
+from mysql.element_template_sql import delete_element_templates_by_page_ids
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
 
@@ -27,7 +28,12 @@ def _build_real_file_name(file_name: str | None) -> str | None:
     """真实文件名称 = 当前时间戳 + "_" + 文件名称"""
     if not file_name:
         return None
-    return f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file_name}"
+    base_name = os.path.basename(file_name.strip())
+    name, ext = os.path.splitext(base_name)
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    if not name:
+        name = "playwright"
+    return f"{name}_{timestamp}{ext or '.py'}"
 
 
 async def get_page_info_service(db: Session, item_id: int):
@@ -40,7 +46,7 @@ async def get_page_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "页面信息不存在"}'
         )
 
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = PageInfoInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -49,10 +55,10 @@ async def get_page_info_list_service(db: Session, page_num: int = 1, page_size: 
     """获取页面信息分页列表"""
     items, total = await get_page_info_list(db, page_num, page_size, project_id)
 
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_items = [PageInfoInfo.model_validate(item) for item in items]
 
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -65,7 +71,7 @@ async def get_page_info_list_service(db: Session, page_num: int = 1, page_size: 
 
 async def create_page_info_service(db: Session, data: PageInfoCreate):
     """创建页面信息"""
-    # 业务逻辑校验：检查是否存在相同的page_name和project_id组合
+    """业务逻辑校验：检查是否存在相同的page_name和project_id组合"""
     existing = await get_page_info_by_unique_fields(
         db,
         page_name=data.page_name,
@@ -81,19 +87,19 @@ async def create_page_info_service(db: Session, data: PageInfoCreate):
         )
 
     data_dict = data.model_dump(by_alias=False)
-    # 真实文件名称 = 当前时间戳 + "_" + 文件名称
+    """真实文件名称 = 当前时间戳 + "_" + 文件名称"""
     data_dict["real_file_name"] = _build_real_file_name(data.file_name)
 
     obj = await create_page_info(db, data_dict)
 
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = PageInfoInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_page_info_service(db: Session, data: PageInfoUpdate):
     """更新页面信息"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_page_info_by_id(db, data.page_id)
     if not existing:
         return error_response(
@@ -103,7 +109,7 @@ async def update_page_info_service(db: Session, data: PageInfoUpdate):
         )
 
     data_dict = data.model_dump(by_alias=False, exclude_unset=True)
-    # 仅在本次更新带了文件名时，才刷新真实文件名称
+    """仅在本次更新带了文件名时，才刷新真实文件名称"""
     if data.file_name:
         data_dict["real_file_name"] = _build_real_file_name(data.file_name)
 
@@ -114,11 +120,11 @@ async def update_page_info_service(db: Session, data: PageInfoUpdate):
 
 async def delete_page_info_batch_service(db: Session, ids: list[int]):
     """批量删除页面信息（含关联子表与文件）"""
-    # 删除关联表的信息（手动级联：page_instance -> page_result）
+    """删除关联表的信息（手动级联：page_instance -> page_result）"""
     await delete_page_related_data(db, ids)
-    # 删除对应的playwright文件
+    """删除对应的playwright文件"""
     await delete_page_playwright_files(db, ids)
-    # 批量删除页面信息
+    """批量删除页面信息"""
     obj = await delete_page_info(db, ids)
     if not obj:
         return error_response(
@@ -133,12 +139,13 @@ async def delete_page_related_data(db: Session, ids: list[int]):
     """删除页面信息关联的子表数据（page_instance 及其下的 page_result）"""
     if not ids:
         return
-    # 先取出这些页面下的全部实例，拿到 instance_id 以清理 page_result
+    """先取出这些页面下的全部实例，拿到 instance_id 以清理 page_result"""
     instances = await get_page_instances_by_page_ids(db, ids)
     instance_ids = [i.page_instance_id for i in instances]
-    # 先删子表 page_result，再删 page_instance
+    """先删子表 page_result，再删 page_instance"""
     await delete_page_result_by_instance_ids(db, instance_ids)
     await delete_page_instance_by_page_ids(db, ids)
+    await delete_element_templates_by_page_ids(db, ids)
 
 
 async def delete_page_playwright_files(db: Session, ids: list[int]):
@@ -148,7 +155,7 @@ async def delete_page_playwright_files(db: Session, ids: list[int]):
     code_path = os.getenv("PLAYWRIGHT_CODE_PATH")
     if not code_path:
         return
-    # 根据ids获取page_info记录，删除其real_file_name对应的文件
+    """根据ids获取page_info记录，删除其real_file_name对应的文件"""
     for page_id in ids:
         page_info = await get_page_info_by_id(db, page_id)
         if not page_info or not page_info.real_file_name:
@@ -158,17 +165,17 @@ async def delete_page_playwright_files(db: Session, ids: list[int]):
             if os.path.exists(file_path):
                 os.remove(file_path)
         except OSError:
-            # 文件删除失败不阻断数据库删除流程
+            """文件删除失败不阻断数据库删除流程"""
             pass
 
 
 async def delete_page_info_service(db: Session, item_id: int):
     """删除页面信息（含关联子表与文件）"""
-    # 删除关联表的信息（手动级联）
+    """删除关联表的信息（手动级联）"""
     await delete_page_related_data(db, [item_id])
-    # 删除对应的文件
+    """删除对应的文件"""
     await delete_page_playwright_files(db, [item_id])
-    # 删除页面信息
+    """删除页面信息"""
     obj = await delete_page_info(db, [item_id])
     if not obj:
         return error_response(

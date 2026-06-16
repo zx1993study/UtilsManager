@@ -60,7 +60,7 @@ async def get_token_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "Token信息不存在"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = TokenInfoInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -69,10 +69,10 @@ async def get_token_info_list_service(db: Session, filter: TokenInfoList):
     """获取Token信息分页列表"""
     items, total = await get_token_info_list(db, filter = filter)
     
-    # 将字典转换为Schema对象
+    """将字典转换为Schema对象"""
     schema_items = [TokenInfoInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -85,7 +85,7 @@ async def get_token_info_list_service(db: Session, filter: TokenInfoList):
 
 async def create_token_info_service(db: Session, data: TokenInfoCreate):
     """创建Token信息"""
-    # 业务逻辑校验：检查是否存在相同的project_id和name组合
+    """业务逻辑校验：检查是否存在相同的project_id和name组合"""
     existing = await get_token_info_by_unique_fields(
         db, 
         project_id=data.project_id,
@@ -93,7 +93,7 @@ async def create_token_info_service(db: Session, data: TokenInfoCreate):
     )
     
     if existing:
-        # 将ORM对象转换为Schema对象
+        """将ORM对象转换为Schema对象"""
         schema_existing = TokenInfoInfo.model_validate(existing)
         return error_response(
             msg="添加失败，该Token已存在",
@@ -112,14 +112,14 @@ async def create_token_info_service(db: Session, data: TokenInfoCreate):
 
     obj = await create_token_info(db, data_dict)
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = TokenInfoInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_token_info_service(db: Session,  data: TokenInfoUpdate):
     """更新Token信息"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_token_info_by_id(db, data.token_id)
     if not existing:
         return error_response(
@@ -139,14 +139,14 @@ async def update_token_info_service(db: Session,  data: TokenInfoUpdate):
 
     obj = await update_token_info(db, data.token_id, data_dict)
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = TokenInfoInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
 
 async def delete_token_info_service(db: Session, item_id: int):
     """删除Token信息"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_token_info_by_id(db, item_id)
     if not existing:
         return error_response(
@@ -185,7 +185,7 @@ async def refresh_token_service(db: Session, token_id: int):
     Returns:
         刷新结果
     """
-    # 1. 获取Token信息
+    """1. 获取Token信息"""
     token_info = await get_token_info_by_id(db, token_id)
     if not token_info:
         return error_response(
@@ -195,7 +195,7 @@ async def refresh_token_service(db: Session, token_id: int):
         )
     logger.info(f"刷新Token：获取到Token信息，token_id={token_id}, instance_id={token_info.instance_id}")
     
-    # 2. 检查instance_id是否存在
+    """2. 检查instance_id是否存在"""
     instance_id = token_info.instance_id
     if not instance_id:
         return error_response(
@@ -225,11 +225,11 @@ async def refresh_token_service(db: Session, token_id: int):
                 }
             )
 
-        # 3. 调用API执行服务，重新执行该实例
+        """3. 调用API执行服务，重新执行该实例"""
         execute_request = ApiExecuteRequest(execution_type=1, target_id=instance_id)
         execute_result = await execute_api_service(db, execute_request)
         
-        # 4. 获取最新的执行结果
+        """4. 获取最新的执行结果"""
         latest_result = await get_latest_result_by_instance_id(db, instance_id)
         if not latest_result or not latest_result.response_info:
             return error_response(
@@ -238,7 +238,7 @@ async def refresh_token_service(db: Session, token_id: int):
                 error='{"errorCode": "NO_RESULT", "message": "未获取到API执行结果"}'
             )
         
-        # 5. 解析responseInfo，提取token
+        """5. 解析responseInfo，提取token"""
         response_info = latest_result.response_info
         if isinstance(response_info, str):
             try:
@@ -252,12 +252,12 @@ async def refresh_token_service(db: Session, token_id: int):
         else:
             response_data = response_info
         
-        # 6. 从响应中提取token（假设token在response_data的"token"或"data.token"字段中）
+        """6. 从响应中提取token（假设token在response_data的"token"或"data.token"字段中）"""
         extracted_token = None
         if isinstance(response_data, dict):
-            # 尝试直接获取token
+            """尝试直接获取token"""
             extracted_token = response_data.get('token')
-            # 如果没有，尝试从data中获取
+            """如果没有，尝试从data中获取"""
             if not extracted_token and 'data' in response_data:
                 data_obj = response_data['data']
                 if isinstance(data_obj, dict):
@@ -270,8 +270,9 @@ async def refresh_token_service(db: Session, token_id: int):
                 error='{"errorCode": "TOKEN_NOT_FOUND", "message": "响应数据中未包含token字段"}'
             )
         
-        # 7. 拼接token：token类型 + 空格 + 返回的token
-        token_type = token_info.type  # 假设type字段存储的是token类型，如"Bearer"
+        """7. 拼接token：token类型 + 空格 + 返回的token"""
+        token_type = token_info.type
+        """??type??????token????'Bearer'?"""
         token_map = {
             1: "Bearer",    
             2: "Basic",
@@ -281,7 +282,7 @@ async def refresh_token_service(db: Session, token_id: int):
         
         new_token = f"{token_type} {extracted_token}"
         
-        # 8. 更新Token表中的token字段
+        """8. 更新Token表中的token字段"""
         await update_token_info(db, token_id, {'token': new_token})
         
         return success_response(

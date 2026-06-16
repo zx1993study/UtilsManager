@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from pydantic.alias_generators import to_camel
 from typing import Optional
 from datetime import datetime
+from models.dict_info_model import DictInfo
 
 
 class DictInfoBase(BaseModel):
@@ -30,7 +31,31 @@ class DictInfoCreate(DictInfoBase):
 
 class DictInfoUpdate(DictInfoBase):
     """字典信息更新Schema"""
-    pass
+    dict_id: int = Field(..., description="主键")
+
+
+class DictInfoList(DictInfoBase):
+    """字典信息列表查询Schema"""
+    page_num: int = Field(default=1, description="页码")
+    page_size: int = Field(default=10, description="页大小")
+
+    def filter_params(self):
+        filter_params = []
+        if self.dict_name is not None:
+            filter_params.append(DictInfo.dict_name.contains(self.dict_name))
+        if self.dict_key is not None:
+            filter_params.append(DictInfo.dict_key.contains(self.dict_key))
+        if self.dict_value is not None:
+            filter_params.append(DictInfo.dict_value.contains(self.dict_value))
+        if self.type is not None:
+            filter_params.append(DictInfo.type == self.type)
+        if self.status is not None:
+            filter_params.append(DictInfo.status == self.status)
+        return filter_params
+
+
+class DictInfoIds(BaseModel):
+    ids: list[int] = Field(..., description="字典ID列表")
 
 
 class DictInfoInfo(DictInfoBase):

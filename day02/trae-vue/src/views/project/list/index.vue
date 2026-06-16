@@ -13,13 +13,12 @@
       @delete="handleDelete"
       @batch-delete="handleBatchDelete"
     >
-      <!-- 自定义操作列 -->
       <template #operation="{ row }">
         <el-button
-          v-if="row.projectSwagger"
           type="primary"
           size="small"
           link
+          :disabled="!hasSwagger(row)"
           @click="handleParseSwagger(row)"
         >
           <el-icon><Document /></el-icon>
@@ -28,7 +27,6 @@
       </template>
     </common-table>
 
-    <!-- 新增/编辑弹窗 -->
     <common-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
@@ -74,7 +72,6 @@ import * as projectApi from '@/api/project/project'
 const tableRef = ref(null)
 const submitLoading = ref(false)
 
-// 列配置
 const columns = [
   { prop: 'projectName', label: '项目名称', minWidth: 200 },
   { prop: 'projectAddress', label: '项目地址', minWidth: 200, showOverflowTooltip: true },
@@ -83,19 +80,16 @@ const columns = [
   { prop: 'createTime', label: '创建时间', width: 180 }
 ]
 
-// 搜索字段配置
 const searchFields = [
   { type: 'input', prop: 'projectName', label: '项目名称', placeholder: '请输入项目名称' }
 ]
 
-// 分页配置
 const pagination = reactive({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-// 弹窗配置
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const formData = reactive({
@@ -110,23 +104,24 @@ const formRules = {
   projectName: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
 }
 
-// 处理新增
+const hasSwagger = (row) => {
+  return Boolean(String(row?.projectSwagger || '').trim())
+}
+
 const handleAdd = () => {
   dialogTitle.value = '新增项目'
   resetForm()
   dialogVisible.value = true
 }
 
-// 处理编辑
 const handleEdit = (row) => {
   dialogTitle.value = '编辑项目'
   Object.assign(formData, row)
   dialogVisible.value = true
 }
 
-// 处理删除
 const handleDelete = (row) => {
-  ElMessageBox.confirm(`确定要删除项目"${row.projectName}"吗？`, '提示', {
+  ElMessageBox.confirm(`确定要删除项目「${row.projectName}」吗？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
@@ -142,7 +137,6 @@ const handleDelete = (row) => {
   }).catch(() => {})
 }
 
-// 处理批量删除
 const handleBatchDelete = async (rows) => {
   ElMessageBox.confirm(`确定要删除选中的 ${rows.length} 个项目吗？`, '提示', {
     confirmButtonText: '确定',
@@ -161,10 +155,13 @@ const handleBatchDelete = async (rows) => {
   }).catch(() => {})
 }
 
-// 处理解析Swagger
 const handleParseSwagger = (row) => {
+  if (!hasSwagger(row)) {
+    return
+  }
+
   ElMessageBox.confirm(
-    `确定要解析项目"${row.projectName}"的Swagger文档吗？`,
+    `确定要解析项目「${row.projectName}」的Swagger文档吗？`,
     '提示',
     {
       confirmButtonText: '确定',
@@ -187,7 +184,6 @@ const handleParseSwagger = (row) => {
   }).catch(() => {})
 }
 
-// 处理提交
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
@@ -205,7 +201,6 @@ const handleSubmit = async () => {
   }
 }
 
-// 重置表单
 const resetForm = () => {
   Object.assign(formData, {
     projectId: null,

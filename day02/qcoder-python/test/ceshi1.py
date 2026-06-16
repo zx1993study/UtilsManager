@@ -14,7 +14,7 @@ def run(playwright: Playwright) -> None:
     page.get_by_role("button", name="登 录").click()
     page.locator("div").filter(has_text=re.compile(r"^客户管理$")).click()
     page.get_by_role("link", name="前端").click()
-    page.get_by_role("button", name="更多 ").click()
+    page.get_by_role("button", name="更多").click()
     page.get_by_text("新增").click()
     page.get_by_role("dialog", name="添加终端客户").get_by_placeholder("请输入客户名称").click()
     page.get_by_role("dialog", name="添加终端客户").get_by_placeholder("请输入客户名称").fill("pw客户1")
@@ -25,7 +25,7 @@ def run(playwright: Playwright) -> None:
     page.wait_for_timeout(3000)
     page.get_by_role("button", name="确 定").click()
 
-    # ---------------------
+    """---------------------"""
     context.close()
     browser.close()
 

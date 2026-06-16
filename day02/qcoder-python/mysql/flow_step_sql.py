@@ -84,23 +84,23 @@ async def get_flow_step_list(
     Returns:
         Tuple[List[dict], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (filter_params.page_num - 1) * filter_params.page_size
     
-    # 构建查询条件
+    """构建查询条件"""
     conditions = []
     if filter_params.flow_id is not None:
         conditions.append(FlowStep.flow_id == filter_params.flow_id)
     if filter_params.api_id is not None:
         conditions.append(FlowStep.api_id == filter_params.api_id)
     
-    # 查询总数
+    """查询总数"""
     count_stmt = select(func.count()).select_from(FlowStep)
     if conditions:
         count_stmt = count_stmt.where(and_(*conditions))
     total = db.execute(count_stmt).scalar()
     
-    # 查询分页数据（关联ApiInfo和ApiInstance）
+    """查询分页数据（关联ApiInfo和ApiInstance）"""
     stmt = select(
         FlowStep,
         ApiInfo.api_name,
@@ -118,8 +118,7 @@ async def get_flow_step_list(
     stmt = stmt.offset(offset).limit(filter_params.page_size).order_by(FlowStep.step_id.asc())
     
     result = db.execute(stmt).all()
-    
-    # 转换为字典列表
+    """转换为字典列表"""
     items = []
     for row in result:
         flow_step = row[0]

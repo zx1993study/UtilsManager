@@ -27,7 +27,7 @@ async def get_flow_step_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "流程步骤不存在"}'
         )
     
-    # 将字典转换为Schema对象
+    """将字典转换为Schema对象"""
     schema_obj = FlowStepInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -36,10 +36,10 @@ async def get_flow_step_list_service(db: Session, filter_params: FlowStepList):
     """获取流程步骤分页列表"""
     items, total = await get_flow_step_list(db, filter_params)
     
-    # 将字典转换为Schema对象
+    """将字典转换为Schema对象"""
     schema_items = [FlowStepInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -54,7 +54,7 @@ async def get_flow_steps_by_flow_id_service(db: Session, flow_id: int):
     """根据流程ID获取所有步骤"""
     items = await get_flow_steps_by_flow_id(db, flow_id)
     
-    # 将字典转换为Schema对象
+    """将字典转换为Schema对象"""
     schema_items = [FlowStepInfo.model_validate(item) for item in items]
     
     return success_response(msg="查询成功", data=schema_items)
@@ -64,14 +64,14 @@ async def create_flow_step_service(db: Session, data: FlowStepCreate):
     """创建流程步骤"""
     obj = await create_flow_step(db, data.model_dump(by_alias=False))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = FlowStepInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_flow_step_service(db: Session, data: FlowStepUpdate):
     """更新流程步骤"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_flow_step_by_id(db, data.step_id)
     if not existing:
         return error_response(
@@ -82,14 +82,14 @@ async def update_flow_step_service(db: Session, data: FlowStepUpdate):
     
     obj = await update_flow_step(db, data.step_id, data.model_dump(by_alias=False, exclude_unset=True))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = FlowStepInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
 
 async def delete_flow_step_service(db: Session, item_id: int):
     """删除流程步骤"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_flow_step_by_id(db, item_id)
     if not existing:
         return error_response(

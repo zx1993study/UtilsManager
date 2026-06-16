@@ -1,10 +1,31 @@
 from fastapi import APIRouter
-from . import sys_user, project_info, dict_info, api_info, api_instance, api_template, api_result, page_info, page_instance, page_result, page_execute, element_template, flow_info, flow_step, flow_result, token_info, api_execute, swagger_parse, auth
 
-# 创建 API v1 主路由器
+from . import (
+    api_execute,
+    api_info,
+    api_instance,
+    api_result,
+    api_template,
+    app,
+    auth,
+    dict_info,
+    element_template,
+    flow_info,
+    flow_result,
+    flow_step,
+    page_execute,
+    page_info,
+    page_instance,
+    page_result,
+    project_info,
+    swagger_parse,
+    sys_user,
+    system_log,
+    token_info,
+)
+
 api_router = APIRouter()
 
-# 包含所有子路由
 api_router.include_router(auth.router, prefix="/api/v1", tags=["认证"])
 api_router.include_router(sys_user.router, prefix="/api/v1", tags=["系统用户"])
 api_router.include_router(project_info.router, prefix="/api/v1", tags=["项目管理"])
@@ -22,5 +43,7 @@ api_router.include_router(flow_info.router, prefix="/api/v1", tags=["流程信�
 api_router.include_router(flow_step.router, prefix="/api/v1", tags=["流程步骤管理"])
 api_router.include_router(flow_result.router, prefix="/api/v1", tags=["流程结果管理"])
 api_router.include_router(token_info.router, prefix="/api/v1", tags=["Token管理"])
-api_router.include_router(api_execute.router,prefix="/api/v1", tags=["API执行"])
+api_router.include_router(api_execute.router, prefix="/api/v1", tags=["API执行"])
+api_router.include_router(app.router, prefix="/api/v1", tags=["App自动化"])
 api_router.include_router(swagger_parse.router, prefix="/api/v1", tags=["Swagger解析"])
+api_router.include_router(system_log.router, prefix="/api/v1", tags=["系统日志"])

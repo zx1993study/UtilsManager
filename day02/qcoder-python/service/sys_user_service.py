@@ -27,7 +27,7 @@ async def get_sys_user_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "系统用户不存在"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = SysUserInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -36,10 +36,10 @@ async def get_sys_user_list_service(db: Session, page_num: int = 1, page_size: i
     """获取系统用户分页列表"""
     items, total = await get_sys_user_list(db, page_num, page_size)
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_items = [SysUserInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -52,7 +52,7 @@ async def get_sys_user_list_service(db: Session, page_num: int = 1, page_size: i
 
 async def create_sys_user_service(db: Session, data: SysUserCreate):
     """创建系统用户"""
-    # 业务逻辑校验：检查是否存在相同的username
+    """业务逻辑校验：检查是否存在相同的username"""
     existing = await get_sys_user_by_username(
         db, 
         username=data.username
@@ -67,14 +67,14 @@ async def create_sys_user_service(db: Session, data: SysUserCreate):
     
     obj = await create_sys_user(db, data.model_dump(by_alias=False))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = SysUserInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_sys_user_service(db: Session, item_id: int, data: SysUserUpdate):
     """更新系统用户"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_sys_user_by_id(db, item_id)
     if not existing:
         return error_response(
@@ -82,7 +82,7 @@ async def update_sys_user_service(db: Session, item_id: int, data: SysUserUpdate
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "系统用户不存在"}'
         )
-      # 业务逻辑校验：检查是否存在相同的username
+    """????????????????username?"""
     existing = await get_sys_user_by_username(
         db, 
         username=data.username
@@ -97,7 +97,7 @@ async def update_sys_user_service(db: Session, item_id: int, data: SysUserUpdate
     
     obj = await update_sys_user(db, item_id, data.model_dump(by_alias=False, exclude_unset=True))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = SysUserInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 

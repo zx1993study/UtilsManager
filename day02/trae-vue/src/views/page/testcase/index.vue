@@ -8,19 +8,44 @@
       :search-fields="[]"
       :show-selection="true"
       :show-copy="true"
-      :operation-width="220"
+      :operation-width="280"
       row-key="pageInstanceId"
       @add="handleAdd"
       @edit="handleEdit"
       @copy="handleCopy"
       @delete="handleDelete"
       @batch-delete="handleBatchDelete"
+      @selection-change="handleSelectionChange"
     >
       <template #pageName="{ row }">
         {{ getPageName(row.pageId) }}
       </template>
       <template #operationJson="{ row }">
         <span class="json-preview">{{ row.operationJson }}</span>
+      </template>
+      <template #toolbar-left>
+        <el-button
+          type="success"
+          :loading="batchRunning"
+          :disabled="!selectedRows.length || batchRunning || !!runningCaseIds.length"
+          @click="handleBatchRun"
+        >
+          <el-icon><VideoPlay /></el-icon>
+          <span>批量运行</span>
+        </el-button>
+      </template>
+      <template #operation="{ row }">
+        <el-button
+          type="success"
+          size="small"
+          link
+          :loading="isCaseRunning(row.pageInstanceId)"
+          :disabled="isCaseRunning(row.pageInstanceId)"
+          @click.stop="handleRun(row)"
+        >
+          <el-icon><VideoPlay /></el-icon>
+          <span>运行</span>
+        </el-button>
       </template>
     </common-table>
 
@@ -90,9 +115,10 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { VideoPlay } from '@element-plus/icons-vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import * as pageTestcaseApi from '@/api/page/page-testcase'
 import { getPageFunctionList } from '@/api/page/page-function'
 import { getProjectList } from '@/api/project/project'
@@ -105,6 +131,9 @@ const dialogTitle = ref('')
 const submitMode = ref('add')
 const projectOptions = ref([])
 const pageOptions = ref([])
+const selectedRows = ref([])
+const runningCaseIds = ref([])
+const batchRunning = ref(false)
 
 const columns = [
   { prop: 'instanceName', label: '测试用例名称', minWidth: 180 },
@@ -112,6 +141,7 @@ const columns = [
   { prop: 'expectResult', label: '期望结果', minWidth: 180 },
   { prop: 'operationJson', label: '用例JSON', minWidth: 240, slot: 'operationJson' },
   { prop: 'screenPhotoFile', label: '截图名称', minWidth: 160 },
+  { prop: 'execCount', label: '执行次数', width: 100 },
   { prop: 'createTime', label: '创建时间', width: 180 }
 ]
 
@@ -154,6 +184,14 @@ const pageMap = computed(() => {
 
 const getPageName = (pageId) => {
   return pageMap.value[pageId]?.pageName || pageId || '-'
+}
+
+const isCaseRunning = (id) => runningCaseIds.value.includes(id)
+
+const setCaseRunning = (id, running) => {
+  runningCaseIds.value = running
+    ? [...new Set([...runningCaseIds.value, id])]
+    : runningCaseIds.value.filter(item => item !== id)
 }
 
 const loadPagedList = async (apiMethod, params = {}) => {
@@ -241,7 +279,7 @@ const handleCopy = (row) => {
 }
 
 const handleDelete = (row) => {
-  ElMessageBox.confirm(`确定要删除测试用例"${row.instanceName}"吗？`, '提示', {
+  ElMessageBox.confirm(`确定要删除测试用例「${row.instanceName}」吗？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
@@ -274,6 +312,71 @@ const handleBatchDelete = (rows) => {
       showRequestError(error, '批量删除失败')
     }
   }).catch(() => {})
+}
+
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+const handleRun = (row) => {
+  if (isCaseRunning(row.pageInstanceId) || batchRunning.value) {
+    return
+  }
+  setCaseRunning(row.pageInstanceId, true)
+  pageTestcaseApi.executePageTestCase(row.pageId, row.pageInstanceId)
+    .then((res) => {
+      if (handleApiResponse(res, '执行完成', '执行失败')) {
+        tableRef.value?.refresh()
+      }
+    })
+    .catch((error) => {
+      showRequestError(error, '执行失败')
+    })
+    .finally(() => {
+      setCaseRunning(row.pageInstanceId, false)
+    })
+}
+
+const handleBatchRun = () => {
+  if (batchRunning.value || runningCaseIds.value.length) {
+    return
+  }
+  if (!selectedRows.value.length) {
+    ElMessage.warning('请选择要运行的测试用例')
+    return
+  }
+
+  const pageIds = [...new Set(selectedRows.value.map(row => row.pageId))]
+  if (pageIds.length !== 1) {
+    ElMessage.warning('批量运行只能选择同一个页面功能下的测试用例')
+    return
+  }
+
+  batchRunning.value = true
+  const ids = selectedRows.value.map(row => row.pageInstanceId)
+  runningCaseIds.value = ids
+  ElMessageBox.confirm(`确定要运行选中的 ${selectedRows.value.length} 个测试用例吗？`, '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'info'
+  }).then(async () => {
+    try {
+      const res = await pageTestcaseApi.batchExecutePageTestCase(pageIds[0], ids)
+      if (handleApiResponse(res, '批量执行完成', '批量执行失败')) {
+        tableRef.value?.refresh()
+        tableRef.value?.clearSelection()
+        selectedRows.value = []
+      }
+    } catch (error) {
+      showRequestError(error, '批量执行失败')
+    } finally {
+      batchRunning.value = false
+      runningCaseIds.value = []
+    }
+  }).catch(() => {
+    batchRunning.value = false
+    runningCaseIds.value = []
+  })
 }
 
 const buildPayload = () => {
@@ -339,3 +442,4 @@ onMounted(() => {
   white-space: nowrap;
 }
 </style>
+

@@ -48,18 +48,19 @@ async def get_page_info_list(
     Returns:
         Tuple[List[PageInfo], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (page_num - 1) * page_size
-    
+
+    """基础查询，按需过滤 project_id"""
     base_query = db.query(PageInfo)
     if project_id is not None:
         base_query = base_query.filter(PageInfo.project_id == project_id)
 
-    # 查询总数
+    """查询总数"""
     total = base_query.with_entities(func.count(PageInfo.page_id)).scalar()
-    
-    # 查询分页数据
-    items = base_query.offset(offset).limit(page_size).all()
+
+    """查询分页数据"""
+    items = base_query.order_by(PageInfo.page_id.desc()).offset(offset).limit(page_size).all()
     
     return items, total
 

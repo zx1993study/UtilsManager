@@ -1,523 +1,826 @@
-"""
-页面执行Service层
-基于 playwright codegen 生成脚本，并通过子进程真实执行。
-"""
-import os
-import sys
-import json
+"""Page automation service based on page inspection and template playback."""
 import asyncio
-import subprocess
+import ast
+import json
+import os
 import re
+import subprocess
+import sys
 import tempfile
-from threading import Lock
 from datetime import datetime
+from time import monotonic
+
 from sqlalchemy.orm import Session
+
+from core.responsemsg import error_response, success_response
+from mysql.dict_info_sql import get_active_dict_info_by_key
+from mysql.element_template_sql import (
+    batch_create_element_templates,
+    delete_element_templates_by_page_id,
+    get_element_templates_by_page_id,
+)
 from mysql.page_info_sql import get_page_info_by_id
-from mysql.page_instance_sql import get_page_instance_by_id, get_page_instances_by_ids, update_page_instance
+from mysql.page_instance_sql import (
+    get_page_instance_by_id,
+    get_page_instances_by_ids,
+    update_page_instance_execute_state,
+)
 from mysql.page_result_sql import batch_create_page_result
 from mysql.token_info_sql import get_token_info_by_id
-from core.responsemsg import success_response, error_response
+from utils.playwright_splice import PlaywrightSplice
 
-# 子进程执行的最长等待时间（秒）
 EXECUTE_TIMEOUT = 300
-# response_info 入库时的最大长度
 RESPONSE_MAX_LEN = 10000
-_CODEGEN_PROCESSES = {}
-_CODEGEN_LOCK = Lock()
-_CODEGEN_STARTUP_CHECK_SECONDS = 2
+LOCATOR_ROLE = 1
+LOCATOR_PLACEHOLDER = 2
+LOCATOR_TEXT = 3
+LOCATOR_LISTITEM_TEXT = 4
+LOCATOR_CSS = 5
+LOCATOR_LABEL = 6
+
+ELEMENT_TEXTBOX = 1
+ELEMENT_SELECT = 2
+ELEMENT_BUTTON = 3
+ELEMENT_TEXT = 4
+
+OP_CLICK = 1
+OP_FILL = 2
+OP_SELECT = 3
+OP_UPLOAD = 4
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_PLAYWRIGHT_HEADLESS = False
+DEFAULT_PLAYWRIGHT_SLOW_MO = 300
+REQUEST_CACHE_TTL_SECONDS = 120
+_EXECUTE_REQUEST_CACHE: dict[str, tuple[float, dict]] = {}
+_INSPECT_REQUEST_CACHE: dict[str, tuple[float, dict]] = {}
+_EXECUTE_RUNNING_KEYS: set[str] = set()
+_INSPECT_RUNNING_PAGE_IDS: set[int] = set()
+
+
+def _resolve_runtime_path(path_value: str | None, default_name: str) -> str:
+    path = path_value or os.path.join(BASE_DIR, default_name)
+    if not os.path.isabs(path):
+        path = os.path.join(BASE_DIR, path)
+    return os.path.abspath(path)
+
+
+def _parse_bool(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on", "是"}:
+        return True
+    if text in {"0", "false", "no", "n", "off", "否"}:
+        return False
+    return default
+
+
+def _get_cached_execute_response(request_id: str | None) -> dict | None:
+    if not request_id:
+        return None
+    now = monotonic()
+    expired_keys = [
+        key for key, (created_at, _) in _EXECUTE_REQUEST_CACHE.items()
+        if now - created_at > REQUEST_CACHE_TTL_SECONDS
+    ]
+    for key in expired_keys:
+        _EXECUTE_REQUEST_CACHE.pop(key, None)
+    cached = _EXECUTE_REQUEST_CACHE.get(request_id)
+    return cached[1] if cached else None
+
+
+def _set_cached_execute_response(request_id: str | None, response: dict) -> None:
+    if request_id:
+        _EXECUTE_REQUEST_CACHE[request_id] = (monotonic(), response)
+
+
+def _get_cached_inspect_response(request_id: str | None) -> dict | None:
+    if not request_id:
+        return None
+    now = monotonic()
+    expired_keys = [
+        key for key, (created_at, _) in _INSPECT_REQUEST_CACHE.items()
+        if now - created_at > REQUEST_CACHE_TTL_SECONDS
+    ]
+    for key in expired_keys:
+        _INSPECT_REQUEST_CACHE.pop(key, None)
+    cached = _INSPECT_REQUEST_CACHE.get(request_id)
+    return cached[1] if cached else None
+
+
+def _set_cached_inspect_response(request_id: str | None, response: dict) -> None:
+    if request_id:
+        _INSPECT_REQUEST_CACHE[request_id] = (monotonic(), response)
+
+
+def _execute_running_key(page_id: int, instance_ids: list[int]) -> str:
+    return f"{page_id}:{','.join(str(item) for item in instance_ids)}"
+
+
+def _parse_int(value, default: int = 0) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+async def _get_playwright_execute_config(db: Session) -> dict:
+    config = {
+        "headless": DEFAULT_PLAYWRIGHT_HEADLESS,
+        "slow_mo": DEFAULT_PLAYWRIGHT_SLOW_MO,
+        "retry_count": 0,
+        "browser_timeout": 0,
+    }
+
+    combined = await get_active_dict_info_by_key(db, "playwright_execute")
+    if combined and combined.dict_value:
+        try:
+            data = json.loads(combined.dict_value)
+            if isinstance(data, dict):
+                config["headless"] = _parse_bool(data.get("headless"), config["headless"])
+                config["slow_mo"] = _parse_int(data.get("slow_mo", data.get("slowMo")), config["slow_mo"])
+                config["retry_count"] = _parse_int(
+                    data.get("retry_count", data.get("retryCount")),
+                    config["retry_count"],
+                )
+                config["browser_timeout"] = _parse_int(
+                    data.get("browser_timeout", data.get("browserTimeout")),
+                    config["browser_timeout"],
+                )
+        except json.JSONDecodeError:
+            pass
+
+    headless_item = await get_active_dict_info_by_key(db, "playwright_headless")
+    if headless_item:
+        config["headless"] = _parse_bool(headless_item.dict_value, config["headless"])
+
+    slow_mo_item = await get_active_dict_info_by_key(db, "playwright_slow_mo")
+    if slow_mo_item:
+        config["slow_mo"] = _parse_int(slow_mo_item.dict_value, config["slow_mo"])
+
+    retry_item = await get_active_dict_info_by_key(db, "playwright_retry_count")
+    if retry_item:
+        config["retry_count"] = _parse_int(retry_item.dict_value, config["retry_count"])
+
+    timeout_item = await get_active_dict_info_by_key(db, "playwright_browser_timeout")
+    if timeout_item:
+        config["browser_timeout"] = _parse_int(timeout_item.dict_value, config["browser_timeout"])
+
+    config["retry_count"] = max(0, config["retry_count"])
+    config["browser_timeout"] = max(0, config["browser_timeout"])
+    return config
+
+def _unique_int_list(values: list[int] | None) -> list[int]:
+    result = []
+    seen = set()
+    for item in values or []:
+        if item is None:
+            continue
+        try:
+            value = int(item)
+        except (TypeError, ValueError):
+            continue
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _code_dir() -> str:
-    """playwright 代码文件目录，确保存在"""
-    code_path = os.getenv("PLAYWRIGHT_CODE_PATH", "./playwright_codes")
-    code_path = os.path.abspath(code_path)
+    code_path = _resolve_runtime_path(os.getenv("PLAYWRIGHT_CODE_PATH"), "playwright_codes")
     os.makedirs(code_path, exist_ok=True)
     return code_path
 
 
 def _screenshot_dir() -> str:
-    """playwright 截图目录，确保存在"""
-    shot_path = os.getenv("PLAYWRIGHT_SCREENSHOT_PATH", "./playwright_screenshots")
-    shot_path = os.path.abspath(shot_path)
+    shot_path = _resolve_runtime_path(os.getenv("PLAYWRIGHT_SCREENSHOT_PATH"), "playwright_screenshots")
     os.makedirs(shot_path, exist_ok=True)
     return shot_path
 
 
 def _token_dir() -> str:
-    """playwright token JSON 目录，确保存在"""
-    token_path = os.getenv("PLAYWRIGHT_TOKEN_PATH", "./playwright_tokens")
-    token_path = os.path.abspath(token_path)
+    configured_path = os.getenv("PLAYWRIGHT_TOKEN_PATH")
+    token_path = (
+        _resolve_runtime_path(configured_path, "playwright_tokens")
+        if configured_path
+        else os.path.join(os.getenv("TEMP", tempfile.gettempdir()), "qcoder_playwright_tokens")
+    )
     os.makedirs(token_path, exist_ok=True)
     return token_path
 
 
-def _log_dir() -> str:
-    """codegen 临时日志目录，不放在 playwright_codes 里。"""
-    log_path = os.path.join(tempfile.gettempdir(), "qcoder_playwright_logs")
-    os.makedirs(log_path, exist_ok=True)
-    return log_path
+def _legacy_token_dir() -> str:
+    return _resolve_runtime_path(None, "playwright_tokens")
+
+
+def _temp_codegen_script_path(page_id: int) -> str:
+    ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    temp_dir = os.path.join(tempfile.gettempdir(), "qcoder_page_codegen")
+    os.makedirs(temp_dir, exist_ok=True)
+    return os.path.join(temp_dir, f"inspect_codegen_{page_id}_{ts}.py")
+
+
+def _run_codegen_command(page_url: str, script_path: str, token_json_path: str | None = None) -> subprocess.CompletedProcess:
+    command = [
+        sys.executable,
+        "-m",
+        "playwright",
+        "codegen",
+        "-o",
+        script_path,
+    ]
+    if token_json_path:
+        command.append(f"--load-storage={token_json_path}")
+    command.append(page_url)
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=EXECUTE_TIMEOUT,
+        cwd=_code_dir(),
+    )
 
 
 def _safe_json_file_name(file_name: str | None, prefix: str = "token") -> str:
-    """生成安全的 JSON 文件名，仅允许文件名本身，不接受路径。"""
     raw_name = (file_name or "").strip()
     raw_name = os.path.basename(raw_name)
-    raw_name = re.sub(r"[^0-9A-Za-z._-]+", "_", raw_name)
-    raw_name = raw_name.strip("._-")
+    raw_name = re.sub(r"[^0-9A-Za-z._-]+", "_", raw_name).strip("._-")
     if not raw_name:
         raw_name = f"{prefix}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
     if not raw_name.lower().endswith(".json"):
         raw_name = f"{raw_name}.json"
     return raw_name
 
-
-def _read_process_log(log_path: str) -> str:
-    """读取 codegen 日志，避免进程闪退时错误信息丢失。"""
+def _parse_json_object(raw: str | None) -> dict:
+    if not raw:
+        return {}
     try:
-        if os.path.exists(log_path):
-            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read()[-RESPONSE_MAX_LEN:]
-    except OSError:
-        pass
-    return ""
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _literal_arg(node: ast.AST | None):
+    if node is None:
+        return None
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, SyntaxError):
+        return ast.unparse(node)
+
+
+def _call_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
+def _keyword_value(call: ast.Call, name: str):
+    for keyword in call.keywords:
+        if keyword.arg == name:
+            return _literal_arg(keyword.value)
+    return None
+
+
+def _call_args_text(call: ast.Call) -> str:
+    parts = [ast.unparse(arg) for arg in call.args]
+    parts.extend(f"{keyword.arg}={ast.unparse(keyword.value)}" for keyword in call.keywords if keyword.arg)
+    return ", ".join(parts)
+
+
+def _operation_from_name(name: str) -> int | None:
+    return {
+        "click": OP_CLICK,
+        "dblclick": OP_CLICK,
+        "fill": OP_FILL,
+        "select_option": OP_SELECT,
+        "set_input_files": OP_UPLOAD,
+    }.get(name)
+
+
+def _operation_default_value(call: ast.Call, operation: int) -> str | None:
+    if operation != OP_UPLOAD:
+        return None
+    value = _literal_arg(call.args[0]) if call.args else None
+    if value is None:
+        return None
+    return str(value)
+
+
+def _element_type_from_locator(locator_type: int, operation: int, role: str | None = None) -> int:
+    if operation == OP_FILL:
+        return ELEMENT_TEXTBOX
+    if operation == OP_SELECT:
+        return ELEMENT_SELECT
+    if operation in (OP_CLICK, OP_UPLOAD):
+        if role in {"textbox", "spinbutton", "combobox"} or locator_type == LOCATOR_PLACEHOLDER:
+            return ELEMENT_TEXTBOX
+        if role in {"listitem", "option"} or locator_type == LOCATOR_LISTITEM_TEXT:
+            return ELEMENT_SELECT
+        return ELEMENT_BUTTON
+    return ELEMENT_TEXT
+
+
+def _locator_from_call(call: ast.Call) -> dict | None:
+    name = _call_name(call)
+    if name == "get_by_role":
+        role = _literal_arg(call.args[0]) if call.args else None
+        locator_name = _keyword_value(call, "name")
+        exact = _keyword_value(call, "exact")
+        element_name = locator_name or role or "role"
+        result = {
+            "element_name": str(element_name),
+            "locator_type": LOCATOR_ROLE,
+            "element_value": _call_args_text(call),
+            "role": str(role) if role else None,
+        }
+        if exact is not None:
+            result["exact"] = bool(exact)
+        return result
+
+    if name == "get_by_placeholder":
+        value = _literal_arg(call.args[0]) if call.args else ""
+        return {
+            "element_name": str(value),
+            "locator_type": LOCATOR_PLACEHOLDER,
+            "element_value": _call_args_text(call),
+            "role": None,
+        }
+
+    if name == "get_by_text":
+        value = _literal_arg(call.args[0]) if call.args else ""
+        return {
+            "element_name": str(value),
+            "locator_type": LOCATOR_TEXT,
+            "element_value": _call_args_text(call),
+            "role": None,
+        }
+
+    if name == "get_by_label":
+        value = _literal_arg(call.args[0]) if call.args else ""
+        return {
+            "element_name": str(value),
+            "locator_type": LOCATOR_LABEL,
+            "element_value": _call_args_text(call),
+            "role": None,
+        }
+
+    if name == "locator":
+        value = _literal_arg(call.args[0]) if call.args else ""
+        return {
+            "element_name": str(value),
+            "locator_type": LOCATOR_CSS,
+            "element_value": _call_args_text(call),
+            "role": None,
+        }
+
+    if name == "filter":
+        has_text = _keyword_value(call, "has_text")
+        if has_text is None:
+            return None
+        return {
+            "element_name": str(has_text),
+            "locator_type": LOCATOR_LISTITEM_TEXT,
+            "element_value": _call_args_text(call),
+            "role": "listitem",
+        }
+
+    return None
+
+
+def _collect_locator_chain(node: ast.AST) -> list[dict]:
+    chain = []
+    current = node
+    while True:
+        if isinstance(current, ast.Attribute):
+            current = current.value
+            continue
+        if not isinstance(current, ast.Call):
+            break
+
+        locator = _locator_from_call(current)
+        if locator:
+            chain.append(locator)
+        if not isinstance(current.func, ast.Attribute):
+            break
+        current = current.func.value
+    chain.reverse()
+    return chain
+
+
+def _has_chained_call(node: ast.AST, call_names: set[str]) -> bool:
+    current = node
+    while True:
+        if isinstance(current, ast.Attribute):
+            current = current.value
+            continue
+        if not isinstance(current, ast.Call):
+            return False
+        name = _call_name(current)
+        if name in call_names:
+            return True
+        if not isinstance(current.func, ast.Attribute):
+            return False
+        current = current.func.value
+
+
+def _extract_nth_value(node: ast.AST) -> int | None:
+    current = node
+    while True:
+        if isinstance(current, ast.Attribute):
+            current = current.value
+            continue
+        if not isinstance(current, ast.Call):
+            return None
+        if _call_name(current) == "nth":
+            raw_value = _literal_arg(current.args[0]) if current.args else None
+            try:
+                return int(raw_value)
+            except (TypeError, ValueError):
+                return None
+        if not isinstance(current.func, ast.Attribute):
+            return None
+        current = current.func.value
+
+
+def _parse_codegen_script_rows(page_id: int, script_content: str) -> list[dict]:
+    tree = ast.parse(script_content)
+    rows = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        operation_name = _call_name(node.value)
+        operation = _operation_from_name(operation_name or "")
+        if operation is None or not isinstance(node.value.func, ast.Attribute):
+            continue
+
+        chain = _collect_locator_chain(node.value.func.value)
+        if not chain:
+            continue
+        if chain[-1]["locator_type"] == LOCATOR_LISTITEM_TEXT and len(chain) >= 2 and chain[-2].get("role") == "listitem":
+            chain.pop(-2)
+
+        locator = chain[-1]
+        parents = chain[:-1]
+        role = locator.get("role")
+        element_items = [
+            {
+                "elementName": parent.get("element_name"),
+                "elementValue": parent.get("element_value"),
+                "elementType": parent.get("locator_type"),
+            }
+            for parent in parents
+        ]
+        nth_value = _extract_nth_value(node.value.func.value)
+        default_value = _operation_default_value(node.value, operation)
+        remark_value: object = []
+        if nth_value is not None and element_items:
+            remark_value = {"element": element_items, "nth": nth_value}
+        elif nth_value is not None:
+            remark_value = [{"nth": nth_value}]
+        elif element_items:
+            remark_value = [
+                {
+                    "element_name": parent.get("element_name"),
+                    "locator_type": parent.get("locator_type"),
+                    "element_value": parent.get("element_value"),
+                }
+                for parent in parents
+            ]
+        if default_value is not None:
+            if isinstance(remark_value, dict):
+                remark_value["defaultValue"] = default_value
+            elif element_items:
+                remark_value = {"element": element_items, "defaultValue": default_value}
+            else:
+                remark_value = {"defaultValue": default_value}
+
+        rows.append(
+            {
+                "element_name": str(locator.get("element_name") or "")[:50],
+                "page_id": page_id,
+                "locator_type": locator["locator_type"],
+                "element_value": locator["element_value"],
+                "element_type": _element_type_from_locator(locator["locator_type"], operation, role=role),
+                "status": 1,
+                "operation": operation,
+                "remark": json.dumps(remark_value, ensure_ascii=False),
+                "creator": "page_inspector",
+            }
+        )
+    return rows
 
 
 async def _get_token_json_path_by_token_id(db: Session, token_id: int | None) -> str | None:
-    """根据 token_id 返回 token JSON 绝对路径。"""
     if not token_id:
         return None
-
     token_info = await get_token_info_by_id(db, token_id)
     if not token_info or not token_info.token:
         return None
-
     token_path = token_info.token
     if not os.path.isabs(token_path):
         token_path = os.path.join(_token_dir(), token_path)
-
+        if not os.path.exists(token_path):
+            legacy_path = os.path.join(_legacy_token_dir(), token_info.token)
+            if os.path.exists(legacy_path):
+                token_path = legacy_path
     return token_path
 
 
-async def generate_page_excute_file(page_id: int, db: Session):
-    """启动页面脚本录制：调用 playwright codegen 生成脚本"""
-    # 根据page_id获取page_info信息
+async def inspect_page_to_element_templates(
+    db: Session,
+    page_id: int,
+    page_url: str | None = None,
+    replace: bool = True,
+    headless: bool = True,
+    request_id: str | None = None,
+):
+    cached_response = _get_cached_inspect_response(request_id)
+    if cached_response:
+        return cached_response
+    if page_id in _INSPECT_RUNNING_PAGE_IDS:
+        return error_response(
+            msg="inspect page running",
+            data={"error": "page inspect is already running, please wait"},
+        )
+
+    _INSPECT_RUNNING_PAGE_IDS.add(page_id)
     page_info = await get_page_info_by_id(db, page_id)
     if not page_info:
-        return error_response(msg="页面执行文件生成失败", data={"错误信息": "页面信息不存在"})
+        response = error_response(msg="inspect page failed", data={"error": "page info not found"})
+        _set_cached_inspect_response(request_id, response)
+        _INSPECT_RUNNING_PAGE_IDS.discard(page_id)
+        return response
 
-    real_file_name = page_info.real_file_name or page_info.file_name
-    if not real_file_name:
-        return error_response(msg="页面执行文件生成失败", data={"错误信息": "页面未配置文件名称"})
+    target_url = (page_url or page_info.page_url or "").strip()
+    if not target_url:
+        response = error_response(msg="inspect page failed", data={"error": "page url is not configured"})
+        _set_cached_inspect_response(request_id, response)
+        _INSPECT_RUNNING_PAGE_IDS.discard(page_id)
+        return response
 
-    output_path = os.path.join(_code_dir(), real_file_name)
-    log_path = os.path.join(_log_dir(), f"{real_file_name}.codegen.log")
+    script_path = _temp_codegen_script_path(page_id)
     token_json_path = await _get_token_json_path_by_token_id(db, page_info.token_id)
-    if page_info.token_id and not token_json_path:
-        return error_response(msg="页面执行文件生成失败", data={"错误信息": "页面配置的Token不存在或未生成token文件"})
     if token_json_path and not os.path.exists(token_json_path):
-        return error_response(msg="页面执行文件生成失败", data={"错误信息": f"Token文件不存在: {token_json_path}"})
-
-    # 生成cmd命令并执行
-    command = [
-        sys.executable, "-m", "playwright", "codegen",
-    ]
-    if token_json_path:
-        command.extend(["--load-storage", token_json_path])
-    command.extend([
-        "-o", output_path,
-        page_info.page_url or "",
-    ])
+        token_json_path = None
     try:
-        with _CODEGEN_LOCK:
-            running = _CODEGEN_PROCESSES.get(page_id)
-            if running and running["process"].poll() is None:
-                return success_response(
-                    msg="页面脚本录制正在进行，请完成后点击结束生成",
-                    data={"pageId": page_id, "filePath": real_file_name, "status": "running"},
-                )
-            _CODEGEN_PROCESSES.pop(page_id, None)
-
-        # codegen 会打开浏览器录制；这里不长时间阻塞请求，先确认它没有立即闪退。
-        startup_flags = 0
-        if os.name == "nt":
-            startup_flags = subprocess.CREATE_NEW_PROCESS_GROUP
-        log_file = open(log_path, "w", encoding="utf-8")
-        try:
-            process = subprocess.Popen(
-                command,
-                cwd=_code_dir(),
-                stdin=subprocess.DEVNULL,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                creationflags=startup_flags,
+        proc = await asyncio.to_thread(_run_codegen_command, target_url, script_path, token_json_path)
+        response_info = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+        if proc.returncode != 0:
+            response = error_response(
+                msg="inspect page failed",
+                data={"error": response_info[:RESPONSE_MAX_LEN], "returnCode": proc.returncode},
             )
-        finally:
-            log_file.close()
-
-        with _CODEGEN_LOCK:
-            _CODEGEN_PROCESSES[page_id] = {
-                "process": process,
-                "file_path": real_file_name,
-                "output_path": output_path,
-                "log_path": log_path,
-                "token_path": token_json_path,
-            }
-
-        await asyncio.sleep(_CODEGEN_STARTUP_CHECK_SECONDS)
-        if process.poll() is not None:
-            with _CODEGEN_LOCK:
-                _CODEGEN_PROCESSES.pop(page_id, None)
-            log_text = _read_process_log(log_path)
-            return error_response(
-                msg="页面脚本录制启动失败，Playwright 已退出",
-                data={
-                    "pageId": page_id,
-                    "filePath": real_file_name,
-                    "status": "exited",
-                    "returnCode": process.returncode,
-                    "错误信息": log_text or "codegen 启动后立即退出，请检查页面地址、浏览器依赖或 Playwright 安装",
-                },
-            )
-
-        return success_response(
-            msg="页面脚本录制已启动，请完成操作后点击结束生成",
-            data={"pageId": page_id, "filePath": real_file_name, "tokenPath": token_json_path, "status": "running"},
-        )
-    except FileNotFoundError:
-        return error_response(msg="页面执行文件生成失败", data={"错误信息": "未找到 playwright 命令，请先安装 playwright"})
-    except Exception as e:
-        return error_response(msg="页面执行文件生成失败", data={"错误信息": str(e)})
-
-
-async def stop_generate_page_excute_file(page_id: int):
-    """结束页面脚本录制"""
-    with _CODEGEN_LOCK:
-        state = _CODEGEN_PROCESSES.get(page_id)
-
-    if not state:
-        return success_response(msg="没有正在进行的页面脚本录制", data={"pageId": page_id, "status": "idle"})
-
-    process = state["process"]
-    if process.poll() is None:
-        process.terminate()
+            _set_cached_inspect_response(request_id, response)
+            return response
+        if not os.path.exists(script_path):
+            response = error_response(msg="inspect page failed", data={"error": "temporary codegen script was not created"})
+            _set_cached_inspect_response(request_id, response)
+            return response
+        with open(script_path, "r", encoding="utf-8") as f:
+            script_content = f.read()
+        rows = _parse_codegen_script_rows(page_id, script_content)
+    except subprocess.TimeoutExpired:
+        response = error_response(msg="inspect page failed", data={"error": "playwright codegen timeout"})
+        _set_cached_inspect_response(request_id, response)
+        return response
+    except Exception as exc:
+        response = error_response(msg="inspect page failed", data={"error": f"parse codegen script failed: {exc}"})
+        _set_cached_inspect_response(request_id, response)
+        return response
+    finally:
         try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+            if os.path.exists(script_path):
+                os.remove(script_path)
+        except OSError:
+            pass
+        _INSPECT_RUNNING_PAGE_IDS.discard(page_id)
 
-    with _CODEGEN_LOCK:
-        _CODEGEN_PROCESSES.pop(page_id, None)
-
-    file_exists = os.path.exists(state["output_path"])
-    if not file_exists:
-        log_text = _read_process_log(state.get("log_path", ""))
-        return error_response(
-            msg="页面脚本录制已结束，但未生成脚本文件",
-            data={
-                "pageId": page_id,
-                "filePath": state["file_path"],
-                "status": "finished",
-                "错误信息": log_text,
-            },
-        )
-
-    return success_response(
-        msg="页面脚本录制已结束",
-        data={"pageId": page_id, "filePath": state["file_path"], "status": "finished"},
+    if not rows:
+        response = error_response(msg="inspect page failed", data={"error": "no playable operations found in codegen script"})
+        _set_cached_inspect_response(request_id, response)
+        return response
+    deleted_count = await delete_element_templates_by_page_id(db, page_id)
+    saved = await batch_create_element_templates(db, rows)
+    response = success_response(
+        msg="inspect page success",
+        data={
+            "pageId": page_id,
+            "requestId": request_id,
+            "source": "temporary_codegen_script",
+            "scriptFile": None,
+            "detectedCount": len(rows),
+            "deletedCount": deleted_count,
+            "savedCount": len(saved),
+            "items": rows,
+        },
     )
-
-
-async def update_page_execute_file_by_file(file_path: str, content: str):
-    """更新页面执行文件内容"""
-    try:
-        abs_path = os.path.join(_code_dir(), file_path)
-        # 更新文件内容
-        with open(abs_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return success_response(msg="页面执行文件更新成功", data={"文件路径": file_path})
-    except Exception as e:
-        return error_response(msg="页面执行文件更新失败", data={"错误信息": str(e)})
-
-
-def _inject_storage_state_capture(script_content: str) -> str:
-    """在 codegen 生成脚本关闭 context 前注入 storage_state 保存逻辑。"""
-    lines = script_content.splitlines()
-    injected = False
-    output_lines = []
-
-    for line in lines:
-        stripped = line.strip()
-        if not injected and stripped == "context.close()":
-            indent = line[:len(line) - len(line.lstrip())]
-            output_lines.extend([
-                f"{indent}token_json_path = os.environ.get(\"TOKEN_JSON_PATH\")",
-                f"{indent}if token_json_path:",
-                f"{indent}    context.storage_state(path=token_json_path)",
-            ])
-            injected = True
-        output_lines.append(line)
-
-    if not injected:
-        output_lines.extend([
-            "",
-            "token_json_path = os.environ.get(\"TOKEN_JSON_PATH\")",
-            "if token_json_path:",
-            "    raise RuntimeError(\"脚本中未找到可保存 token 的 context.close() 位置\")",
-        ])
-
-    content = "\n".join(output_lines)
-    if "import os" not in content:
-        content = "import os\n" + content
-    return content + "\n"
-
-
-def _inject_storage_state_load(script_content: str) -> str:
-    """在 browser.new_context() 中注入 storage_state，用于加载 cookies/token JSON。"""
-    lines = script_content.splitlines()
-    injected = False
-    output_lines = []
-
-    for line in lines:
-        stripped = line.strip()
-        if not injected and "browser.new_context(" in stripped:
-            indent = line[:len(line) - len(line.lstrip())]
-            if stripped == "context = browser.new_context()":
-                output_lines.extend([
-                    f"{indent}token_json_path = os.environ.get(\"TOKEN_JSON_PATH\")",
-                    f"{indent}context_kwargs = {{}}",
-                    f"{indent}if token_json_path:",
-                    f"{indent}    context_kwargs[\"storage_state\"] = token_json_path",
-                    f"{indent}context = browser.new_context(**context_kwargs)",
-                ])
-                injected = True
-                continue
-
-            output_lines.extend([
-                f"{indent}token_json_path = os.environ.get(\"TOKEN_JSON_PATH\")",
-                f"{indent}context_kwargs = {{}}",
-                f"{indent}if token_json_path:",
-                f"{indent}    context_kwargs[\"storage_state\"] = token_json_path",
-            ])
-            output_lines.append(line.replace("browser.new_context(", "browser.new_context(**context_kwargs, ", 1))
-            injected = True
-            continue
-        output_lines.append(line)
-
-    content = "\n".join(output_lines)
-    if injected and "import os" not in content:
-        content = "import os\n" + content
-    return content + "\n"
-
-
-async def _get_token_json_path_for_page(db: Session, page_id: int | None) -> str | None:
-    """根据页面配置的 token_id 返回 token JSON 绝对路径。"""
-    if not page_id:
-        return None
-
-    page_info = await get_page_info_by_id(db, page_id)
-    if not page_info or not page_info.token_id:
-        return None
-
-    token_path = await _get_token_json_path_by_token_id(db, page_info.token_id)
-    return token_path if os.path.exists(token_path) else None
-
-
-def _build_token_runner(script_path: str) -> str:
-    """创建一个注入 storage_state 的临时执行脚本。"""
-    with open(script_path, "r", encoding="utf-8") as f:
-        script_content = f.read()
-
-    runner_name = f".token_exec_runner_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.py"
-    runner_path = os.path.join(_token_dir(), runner_name)
-    with open(runner_path, "w", encoding="utf-8") as f:
-        f.write(_inject_storage_state_load(script_content))
-    return runner_path
+    _set_cached_inspect_response(request_id, response)
+    return response
 
 
 async def save_token_json_by_instance(db: Session, page_instance_id: int, token_file_name: str | None = None):
-    """执行页面实例，并把浏览器 storage_state 保存为 token JSON 文件。"""
     try:
         instance = await get_page_instance_by_id(db, page_instance_id)
         if not instance:
-            return error_response(msg="保存token json失败", data={"错误信息": "页面实例不存在"})
+            return error_response(msg="save token json failed", data={"error": "page instance not found"})
 
         page_info = await get_page_info_by_id(db, instance.page_id)
         if not page_info:
-            return error_response(msg="保存token json失败", data={"错误信息": "页面信息不存在"})
+            return error_response(msg="save token json failed", data={"error": "page info not found"})
 
-        real_file_name = page_info.real_file_name or page_info.file_name
-        if not real_file_name:
-            return error_response(msg="保存token json失败", data={"错误信息": "页面未配置执行脚本文件"})
-
-        script_path = os.path.join(_code_dir(), real_file_name)
-        if not os.path.exists(script_path):
-            return error_response(msg="保存token json失败", data={"错误信息": f"页面执行脚本不存在: {real_file_name}"})
+        templates = await get_element_templates_by_page_id(db, instance.page_id)
+        if not templates:
+            return error_response(msg="save token json failed", data={"error": "element templates not found"})
 
         safe_name = _safe_json_file_name(token_file_name, prefix=f"token_{page_instance_id}")
         token_path = os.path.join(_token_dir(), safe_name)
-
-        with open(script_path, "r", encoding="utf-8") as f:
-            script_content = f.read()
-
-        runner_name = f".token_runner_{page_instance_id}_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.py"
-        runner_path = os.path.join(_token_dir(), runner_name)
-        with open(runner_path, "w", encoding="utf-8") as f:
-            f.write(_inject_storage_state_capture(script_content))
-
-        run_env = {
-            **os.environ,
-            "OPERATION_JSON": instance.operation_json or "",
-            "TOKEN_JSON_PATH": token_path,
-        }
-        try:
-            proc = subprocess.run(
-                [sys.executable, runner_path],
-                capture_output=True,
-                text=True,
-                timeout=EXECUTE_TIMEOUT,
-                env=run_env,
-                cwd=_code_dir(),
-            )
-        finally:
-            try:
-                os.remove(runner_path)
-            except OSError:
-                pass
-
-        response_info = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
-        if proc.returncode != 0:
-            return error_response(
-                msg="保存token json失败",
-                data={
-                    "错误信息": response_info[:RESPONSE_MAX_LEN],
-                    "returnCode": proc.returncode,
-                },
-            )
+        params = _parse_json_object(instance.operation_json)
+        execute_config = await _get_playwright_execute_config(db)
+        runner = PlaywrightSplice(
+            headless=execute_config["headless"],
+            slow_mo=execute_config["slow_mo"],
+            browser_timeout=execute_config["browser_timeout"],
+        )
+        response_info = await asyncio.to_thread(
+            runner.execute,
+            page_url=page_info.page_url or "",
+            templates=templates,
+            params=params,
+            token_json_path=None,
+            output_storage_state_path=token_path,
+        )
 
         if not os.path.exists(token_path):
             with open(token_path, "w", encoding="utf-8") as f:
                 json.dump({"cookies": [], "origins": []}, f, ensure_ascii=False, indent=2)
 
         return success_response(
-            msg="保存token json成功",
+            msg="save token json success",
             data={
                 "tokenFileName": safe_name,
                 "tokenFilePath": token_path,
                 "pageInstanceId": page_instance_id,
+                "playwrightConfig": execute_config,
+                "responseInfo": response_info[:RESPONSE_MAX_LEN],
             },
         )
     except subprocess.TimeoutExpired:
-        return error_response(msg="保存token json失败", data={"错误信息": "执行超时"})
+        return error_response(msg="save token json failed", data={"error": "execute timeout"})
     except Exception as e:
-        return error_response(msg="保存token json失败", data={"错误信息": str(e)})
+        return error_response(msg="save token json failed", data={"error": str(e)})
 
 
-async def execute_file(file_path: str, instance_ids: list[int], db: Session):
-    """执行页面执行文件，逐个实例运行脚本并把结果落库到 page_result"""
+async def execute_page_by_element_templates(
+    page_id: int,
+    instance_ids: list[int],
+    db: Session,
+    request_id: str | None = None,
+):
     try:
-        abs_path = os.path.join(_code_dir(), file_path)
-        if not os.path.exists(abs_path):
-            return error_response(msg="页面执行文件执行失败", data={"错误信息": f"脚本文件不存在: {file_path}"})
+        cached_response = _get_cached_execute_response(request_id)
+        if cached_response:
+            return cached_response
 
-        # 根据instance_ids获取page_instance信息
-        instances = await get_page_instances_by_ids(db, instance_ids)
+        requested_ids = _unique_int_list(instance_ids)
+        if not requested_ids:
+            return error_response(msg="execute template failed", data={"error": "page instance ids are required"})
+
+        running_key = _execute_running_key(page_id, requested_ids)
+        if running_key in _EXECUTE_RUNNING_KEYS:
+            return success_response(
+                msg="execute template running",
+                data={
+                    "pageId": page_id,
+                    "requestId": request_id,
+                    "requestedIds": requested_ids,
+                    "running": True,
+                },
+            )
+        _EXECUTE_RUNNING_KEYS.add(running_key)
+
+        page_info = await get_page_info_by_id(db, page_id)
+        if not page_info:
+            return error_response(msg="execute template failed", data={"error": "page info not found"})
+
+        templates = await get_element_templates_by_page_id(db, page_id)
+        if not templates:
+            return error_response(msg="execute template failed", data={"error": "element templates not found"})
+
+        instances = await get_page_instances_by_ids(db, requested_ids)
+        instances = [item for item in instances if item.page_id == page_id]
         if not instances:
-            return error_response(msg="页面执行文件执行失败", data={"错误信息": "未找到对应的页面实例"})
+            return error_response(msg="execute template failed", data={"error": "page instances not found"})
 
-        shot_dir = _screenshot_dir()
+        token_json_path = await _get_token_json_path_by_token_id(db, page_info.token_id)
+        if token_json_path and not os.path.exists(token_json_path):
+            token_json_path = None
+
         result_rows = []
-        # 一个参数(operation_json)对应一条执行命令，逐个实例执行（即天然分批）
+        shot_dir = _screenshot_dir()
+        execute_config = await _get_playwright_execute_config(db)
+        runner = PlaywrightSplice(
+            headless=execute_config["headless"],
+            slow_mo=execute_config["slow_mo"],
+            browser_timeout=execute_config["browser_timeout"],
+        )
         for instance in instances:
-            ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
-            screenshot_name = f"{instance.page_instance_id}_{ts}.png"
-            screenshot = os.path.join(shot_dir, screenshot_name)
+            params = _parse_json_object(instance.operation_json)
+            response_info = ""
+            code = "error"
+            success = False
+            screenshot_name = None
+            screenshot = None
+            screenshot_paths = []
+            retry_count = execute_config["retry_count"]
+            total_attempts = retry_count + 1
 
-            # 更新页面实例截图文件名
-            await update_page_instance(db, instance.page_instance_id, {"screen_photo_file": screenshot_name})
+            for attempt_index in range(total_attempts):
+                ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+                screenshot_name = f"{instance.page_instance_id}_{ts}.png"
+                screenshot = os.path.join(shot_dir, screenshot_name)
+                attempt_screenshot_paths = []
+                try:
+                    response_info = await asyncio.to_thread(
+                        runner.execute,
+                        page_url=page_info.page_url or "",
+                        templates=templates,
+                        params=params,
+                        screenshot_path=screenshot,
+                        token_json_path=token_json_path,
+                        screenshot_dir=shot_dir,
+                        screenshot_prefix=f"{instance.page_instance_id}_{ts}",
+                        screenshot_collector=attempt_screenshot_paths,
+                    )
+                    screenshot_paths = attempt_screenshot_paths
+                    success = True
+                    code = "0"
+                    if attempt_index > 0:
+                        response_info = f"retry attempt {attempt_index} success\n{response_info}"
+                    break
+                except Exception as e:
+                    screenshot_paths = attempt_screenshot_paths
+                    success = False
+                    response_info = str(e)
+                    code = "error"
+                    if attempt_index < retry_count:
+                        continue
 
-            # 执行文件：通过环境变量把 operation_json 与截图输出路径传给脚本
-            run_env = {
-                **os.environ,
-                "OPERATION_JSON": instance.operation_json or "",
-                "SCREENSHOT_PATH": screenshot,
-            }
-            run_path = abs_path
-            cleanup_run_path = None
-            token_json_path = await _get_token_json_path_for_page(db, instance.page_id)
-            if token_json_path:
-                run_env["TOKEN_JSON_PATH"] = token_json_path
-                run_path = _build_token_runner(abs_path)
-                cleanup_run_path = run_path
-            try:
-                proc = subprocess.run(
-                    [sys.executable, run_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=EXECUTE_TIMEOUT,
-                    env=run_env,
-                    cwd=_code_dir(),
-                )
-                success = proc.returncode == 0
-                response_info = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
-                code = str(proc.returncode)
-            except subprocess.TimeoutExpired:
-                success = False
-                response_info = "执行超时"
-                code = "timeout"
-            except Exception as e:  # noqa: BLE001
-                success = False
-                response_info = str(e)
-                code = "error"
-            finally:
-                if cleanup_run_path:
-                    try:
-                        os.remove(cleanup_run_path)
-                    except OSError:
-                        pass
-
-            screenshot_names = [screenshot_name] if os.path.exists(screenshot) else []
-
-            # 获取返回的截图文件名列表，并将信息保存到page_result表
-            result_rows.append({
-                "page_instance_id": instance.page_instance_id,
-                "result_status": 1 if success else 0,
-                "code": code,
-                "response_info": response_info[:RESPONSE_MAX_LEN],
-                "screenshot_path": json.dumps(screenshot_names, ensure_ascii=False),
-                "remark": f"实例「{instance.instance_name}」执行{'成功' if success else '失败'}",
-            })
+            screenshot_names = [
+                os.path.basename(path)
+                for path in screenshot_paths
+                if path and os.path.exists(path)
+            ]
+            retry_remark = f", retry_count={retry_count}, attempts={attempt_index + 1}"
+            await update_page_instance_execute_state(
+                db,
+                instance.page_instance_id,
+                success=success,
+                screen_photo_file=screenshot_names[-1] if screenshot_names else None,
+            )
+            result_rows.append(
+                {
+                    "page_instance_id": instance.page_instance_id,
+                    "result_status": 1 if success else 0,
+                    "code": code,
+                    "response_info": response_info[:RESPONSE_MAX_LEN],
+                    "screenshot_path": json.dumps(screenshot_names, ensure_ascii=False),
+                    "remark": (
+                        f"template execute: instance {instance.instance_name} "
+                        f"{'success' if success else 'failed'}{retry_remark}"
+                    ),
+                }
+            )
 
         saved = await batch_create_page_result(db, result_rows)
-        return success_response(
-            msg="页面执行文件执行成功",
-            data={"执行实例数": len(instances), "结果入库数": saved, "结果": result_rows},
+        response = success_response(
+            msg="execute template finished",
+            data={
+                "pageId": page_id,
+                "requestId": request_id,
+                "requestedIds": requested_ids,
+                "templateCount": len(templates),
+                "instanceCount": len(instances),
+                "savedCount": saved,
+                "playwrightConfig": execute_config,
+                "results": result_rows,
+            },
         )
+        _set_cached_execute_response(request_id, response)
+        return response
     except Exception as e:
-        return error_response(msg="页面执行文件执行失败", data={"错误信息": str(e)})
+        response = error_response(msg="execute template failed", data={"error": str(e)})
+        _set_cached_execute_response(request_id, response)
+        return response
+    finally:
+        if "running_key" in locals():
+            _EXECUTE_RUNNING_KEYS.discard(running_key)
 
 
-async def get_page_execute_file(file_path: str):
-    """获取页面执行文件内容"""
-    try:
-        abs_path = os.path.join(_code_dir(), file_path)
-        if not os.path.exists(abs_path):
-            return error_response(msg="页面执行文件获取失败", data={"错误信息": f"脚本文件不存在: {file_path}"})
-        # 获取文件内容
-        with open(abs_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return success_response(msg="页面执行文件获取成功", data={"文件内容": content})
-    except Exception as e:
-        return error_response(msg="页面执行文件获取失败", data={"错误信息": str(e)})
 
 
-async def delete_page_execute_file(file_path: str):
-    """删除页面执行文件"""
-    try:
-        abs_path = os.path.join(_code_dir(), file_path)
-        if not os.path.exists(abs_path):
-            return error_response(msg="页面执行文件删除失败", data={"错误信息": f"脚本文件不存在: {file_path}"})
-        os.remove(abs_path)
-        return success_response(msg="页面执行文件删除成功", data={"文件路径": file_path})
-    except Exception as e:
-        return error_response(msg="页面执行文件删除失败", data={"错误信息": str(e)})
+

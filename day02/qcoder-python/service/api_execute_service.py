@@ -15,7 +15,7 @@ from core.responsemsg import success_response, error_response
 from core.logger import logger
 
 
-# HTTP方法映射
+"""HTTP方法映射"""
 METHOD_MAP = {1: 'GET', 2: 'POST', 3: 'PUT', 4: 'DELETE', 5: 'PATCH'}
 
 def _build_and_send_request(context: dict) -> dict:
@@ -39,12 +39,12 @@ def _build_and_send_request(context: dict) -> dict:
         if not project_info:
             raise Exception(f"项目ID {api_info.project_id} 不存在")
             
-        # 1. 拼接 URL
+        """1. 拼接 URL"""
         base_url = project_info.project_address.rstrip('/')
         method_url = api_info.method_url.lstrip('/')
         url = f"{base_url}/{method_url}"
         
-        # 2. 准备 Headers
+        """2. 准备 Headers"""
         headers = {}
         if api_info.request_header:
             try:
@@ -54,7 +54,7 @@ def _build_and_send_request(context: dict) -> dict:
         if token_info and token_info.token:
             headers['Authorization'] = token_info.token
             
-        # 3. 准备参数 (根据 params_path 判断)
+        """3. 准备参数 (根据 params_path 判断)"""
         params = None
         data = None
         json_data = None
@@ -69,11 +69,12 @@ def _build_and_send_request(context: dict) -> dict:
                 elif path_type == 'body':
                     json_data = inst_json
                     headers['Content-Type'] = 'application/json'
-                else: # 'in' or others treated as query params
+                else:
+                    """'in' or others treated as query params"""
                     params = inst_json
             except: pass
             
-        # 4. 发送请求
+        """4. 发送请求"""
         method = METHOD_MAP.get(api_info.method_type, 'GET')
         response = requests.request(
             method=method,
@@ -117,10 +118,10 @@ def _execute_single_task(db: Session, instance_id: int) -> dict:
         
     exec_result = _build_and_send_request(context)
     
-    # 更新执行次数
+    """更新执行次数"""
     update_api_instance_exec_count(db, instance_id)
     
-    # 构造符合 ApiResult 模型的字典
+    """构造符合 ApiResult 模型的字典"""
     result_db_data = {
         "instance_id": exec_result['instance_id'],
         "result_status": 1 if exec_result['success'] else 0,
@@ -140,17 +141,21 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
     instance_ids = []
     
     try:
-        if etype == 1: # 单实例
+        if etype == 1:
+            """单实例"""
             if not tid: return error_response(msg="缺少 target_id")
             instance_ids = [tid]
-        elif etype == 2: # 批量实例
+        elif etype == 2:
+            """批量实例"""
             if not tids: return error_response(msg="缺少 target_ids")
             instance_ids = tids
-        elif etype == 3: # API下所有实例
+        elif etype == 3:
+            """API下所有实例"""
             if not tid: return error_response(msg="缺少 target_id (api_id)")
             instances = await get_instances_by_api_id(db, tid)
             instance_ids = [i.instance_id for i in instances]
-        elif etype == 4: # 项目下所有实例
+        elif etype == 4:
+            """项目下所有实例"""
             if not tid: return error_response(msg="缺少 target_id (project_id)")
             instances = await get_instances_by_project_id(db, tid)
             instance_ids = [i.instance_id for i in instances]
@@ -161,13 +166,13 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
             return success_response(msg="未找到可执行的测试用例", data=[])
             
         results = []
-        # 超过50条启用多线程执行 HTTP 请求
+        """超过50条启用多线程执行 HTTP 请求"""
         if len(instance_ids) > 50:
             with ThreadPoolExecutor(max_workers=10) as executor:
-                # 注意：这里我们传递 db 是为了在线程中获取上下文，但为了线程安全，
-                # 更好的做法是主线程先查好所有上下文，或者在线程内创建新 session。
-                # 鉴于当前架构，我们暂时保持传递 db，但需注意 SQLAlchemy 配置。
-                # 优化：主线程先获取所有 context
+                """注意：这里我们传递 db 是为了在线程中获取上下文，但为了线程安全，"""
+                """更好的做法是主线程先查好所有上下文，或者在线程内创建新 session。"""
+                """鉴于当前架构，我们暂时保持传递 db，但需注意 SQLAlchemy 配置。"""
+                """优化：主线程先获取所有 context"""
                 contexts = []
                 for iid in instance_ids:
                     ctx = get_api_execution_context(db, iid)
@@ -194,7 +199,7 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
                             "response_info": exec_res['response_info'] or exec_res.get('error_message', ''),
                             "remark": f"耗时: {exec_res['execution_time']}s"
                         })
-                        # 更新执行次数（在主线程或单独处理，避免线程竞争）
+                        """更新执行次数（在主线程或单独处理，避免线程竞争）"""
                         update_api_instance_exec_count(db, iid)
                     except Exception as e:
                         results.append({"instance_id": iid, "response_info": str(e), "result_status": 0, "code": "500", "remark": "执行异常"})
@@ -203,10 +208,10 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
                 res = _execute_single_task(db, iid)
                 results.append(res)
                 
-        # 批量保存结果到 api_result
-        # 仅保存 instance_id 在 api_instance 中真实存在的结果，
-        # 否则会触发外键约束 fk_result_instance 失败（如执行了已删除/不存在的实例）。
-        # 未找到的实例仍保留在返回结果中用于前端展示，但不写库。
+        """批量保存结果到 api_result"""
+        """仅保存 instance_id 在 api_instance 中真实存在的结果，"""
+        """否则会触发外键约束 fk_result_instance 失败（如执行了已删除/不存在的实例）。"""
+        """未找到的实例仍保留在返回结果中用于前端展示，但不写库。"""
         if results:
             valid_instance_ids = get_existing_instance_ids(
                 db, [r["instance_id"] for r in results]

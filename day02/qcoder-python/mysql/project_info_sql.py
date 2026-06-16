@@ -42,13 +42,13 @@ async def get_project_info_list(
     Returns:
         Tuple[List[ProjectInfo], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (page_num - 1) * page_size
     
-    # 查询总数
+    """查询总数"""
     total = db.query(func.count(ProjectInfo.project_id)).scalar()
     
-    # 查询分页数据
+    """查询分页数据"""
     items = db.query(ProjectInfo).offset(offset).limit(page_size).all()
     
     return items, total
@@ -56,7 +56,7 @@ async def get_project_info_list(
 
 async def create_project_info(db: Session, data: dict) -> ProjectInfo:
     """创建项目信息"""
-    # 自动设置审计字段（创建时间、更新时间）
+    """自动设置审计字段（创建时间、更新时间）"""
     data = set_audit_fields_for_create(data)
     db_obj = ProjectInfo(**data)
     db.add(db_obj)
@@ -69,7 +69,7 @@ async def update_project_info(db: Session, project_id: int, data: dict) -> Optio
     """更新项目信息"""
     db_obj = db.query(ProjectInfo).filter(ProjectInfo.project_id == project_id).first()
     if db_obj:
-        # 自动设置更新时间
+        """自动设置更新时间"""
         data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)

@@ -98,13 +98,13 @@ async def get_api_instance_list(
     Returns:
         Tuple[List[dict], int]: 数据列表和总记录数
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (data.page_num - 1) * data.page_size
 
-    # 查询总记录数
+    """查询总记录数"""
     total = await get_api_instance_count(db, data)
 
-    # 查询分页数据
+    """查询分页数据"""
     items = db.query(
                 ApiInstance,
                 ApiInfo.api_name,
@@ -139,7 +139,7 @@ async def get_api_instance_list_by_api_id(
     Returns:
         List[ApiInstance]: API实例列表
     """
-    # 查询所有符合条件的数据
+    """查询所有符合条件的数据"""
     items = db.query(ApiInstance).filter(
         ApiInstance.api_id == api_id
     ).all()
@@ -157,7 +157,7 @@ async def create_api_instance(db: Session, data: dict) -> ApiInstance:
     Returns:
         ApiInstance: 创建的参数实例对象
     """
-    # 自动设置审计字段（创建时间、更新时间）
+    """自动设置审计字段（创建时间、更新时间）"""
     data = set_audit_fields_for_create(data)
     db_obj = ApiInstance(**data)
     db.add(db_obj)
@@ -179,7 +179,7 @@ async def update_api_instance(db: Session, instance_id: int, data: dict) -> Opti
     """
     db_obj = db.query(ApiInstance).filter(ApiInstance.instance_id == instance_id).first()
     if db_obj:
-        # 自动设置更新时间
+        """自动设置更新时间"""
         data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)

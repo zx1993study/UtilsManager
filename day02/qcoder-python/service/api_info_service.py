@@ -37,10 +37,10 @@ async def get_api_info_list_service(db: Session, data: ApiInfoList):
     """获取接口信息分页列表"""
     items, total = await get_api_info_list(db, data)
     
-    # 将字典转换为Schema对象
-    # schema_items = [ApiInfoInfo.model_validate(item) for item in items]
+    """将字典转换为Schema对象"""
+    """schema_items = [ApiInfoInfo.model_validate(item) for item in items]"""
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=items,
         total=total,
@@ -53,7 +53,7 @@ async def get_api_info_list_service(db: Session, data: ApiInfoList):
 
 async def create_api_info_service(db: Session, data: ApiInfoCreate):
     """创建接口信息"""
-    # 业务逻辑校验：检查是否存在相同的method_url、method_type和project_id组合
+    """业务逻辑校验：检查是否存在相同的method_url、method_type和project_id组合"""
     existing = await get_api_info_by_unique_fields(
         db, 
         api_name=data.api_name,
@@ -63,7 +63,7 @@ async def create_api_info_service(db: Session, data: ApiInfoCreate):
     )
     
     if existing:
-        # 将ORM对象转换为Schema对象
+        """将ORM对象转换为Schema对象"""
         schema_existing = ApiInfoInfo.model_validate(existing)
         return error_response(
             msg="添加失败，该接口已存在",
@@ -73,14 +73,14 @@ async def create_api_info_service(db: Session, data: ApiInfoCreate):
     
     obj = await create_api_info(db, data.model_dump(by_alias=False))
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ApiInfoInfo.model_validate(obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
 async def update_api_info_service(db: Session,  data: ApiInfoUpdate):
     """更新接口信息"""
-    # 校验是否存在
+    """校验是否存在"""
     obj = await update_api_info(db, data.api_id, data.model_dump(by_alias=False, exclude_unset=True))
     if not obj:
         return error_response(
@@ -97,7 +97,7 @@ async def update_api_info_service(db: Session,  data: ApiInfoUpdate):
     )
     
     if existing and existing.api_id != obj.api_id:
-        # 将ORM对象转换为Schema对象
+        """将ORM对象转换为Schema对象"""
         schema_existing = ApiInfoInfo.model_validate(existing)
         return error_response(
             msg="更新失败，该接口已存在",
@@ -105,14 +105,14 @@ async def update_api_info_service(db: Session,  data: ApiInfoUpdate):
             error=f'{{"errorCode": "DUPLICATE_API", "message": "项目ID为{data.project_id}的API中，已存在URL为\'{data.method_url}\'且方法类型为{data.method_type}的接口"}}'
         )
        
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ApiInfoInfo.model_validate(obj)
     return success_response(msg="更新成功", data=schema_obj)
 
 
 async def delete_api_info_service(db: Session, item_id: int):
     """删除接口信息（级联删除关联数据）"""
-    # 1. 校验是否存在
+    """1. 校验是否存在"""
     obj = await get_api_info_by_id(db, item_id)
     if not obj:
         return error_response(
@@ -121,12 +121,12 @@ async def delete_api_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "接口信息不存在"}'
         )
     
-    # 2. 级联删除关联的实例、模板和结果
+    """2. 级联删除关联的实例、模板和结果"""
     await delete_api_result_by_api_id(db, item_id)
     await delete_api_instance_by_api_id(db, item_id)
     await delete_api_template_by_api_id(db, item_id)
     
-    # 3. 删除 API 本身
+    """3. 删除 API 本身"""
     result = await delete_api_info(db, item_id)
     
     if not result:

@@ -43,7 +43,7 @@ async def get_api_result_by_id(db: Session, result_id: int) -> Optional[ApiResul
     return get_api_result_dict(item)
 
 def get_api_result_dict(item):
-    # 通过列名直接获取 ApiResult 对象
+    """通过列名直接获取 ApiResult 对象"""
     api_result = item.ApiResult  
     
     result_dict = ApiResultInfo(
@@ -56,7 +56,6 @@ def get_api_result_dict(item):
         remark=api_result.remark,
         create_time=api_result.create_time,
         update_time=api_result.update_time,
-        # 直接通过别名或列名获取其他字段
         instance_name=item.instance_name,
         api_name=item.api_name,
         project_name=item.project_name,
@@ -76,7 +75,7 @@ async def get_api_result_total(
     ApiResultList: ApiResultList
 ) -> Optional[ApiResult]:
     """获取API结果总数"""
-        # 查询总记录数
+    """???????"""
     count_stmt = select(func.count(ApiResult.result_id)).select_from(ApiResult)\
         .join(ApiInstance, ApiResult.instance_id == ApiInstance.instance_id)\
         .join(ApiInfo, ApiInstance.api_id == ApiInfo.api_id)\
@@ -95,7 +94,7 @@ async def get_api_result_list(
     
     total = await get_api_result_total(db, ApiResultList)
     
-    # 使用 select() 替代 db.query()
+    """使用 select() 替代 db.query()"""
     stmt = (
         select(
             ApiResult,
@@ -121,9 +120,10 @@ async def get_api_result_list(
         .limit(page_size)
     )
     
-    # 执行查询
+    """执行查询"""
     result = db.execute(stmt)
-    items = result.all()  # 返回 Row 对象列表
+    items = result.all()
+    """返回 Row 对象列表"""
     
     result_list = []
     for item in items:
@@ -135,7 +135,7 @@ async def get_api_result_list(
 
 async def create_api_result(db: Session, data: dict) -> ApiResult:
     """创建API结果"""
-    # 自动设置审计字段（创建时间、更新时间）
+    """自动设置审计字段（创建时间、更新时间）"""
     data = set_audit_fields_for_create(data)
     db_obj = ApiResult(**data)
     db.add(db_obj)
@@ -148,7 +148,7 @@ async def update_api_result(db: Session, result_id: int, data: dict) -> Optional
     """更新API结果"""
     db_obj = db.query(ApiResult).filter(ApiResult.result_id == result_id).first()
     if db_obj:
-        # 自动设置更新时间
+        """自动设置更新时间"""
         data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)
@@ -175,7 +175,7 @@ async def batch_create_api_results(db: Session, data_list: List[dict]) -> List[A
 async def delete_api_result_by_api_id(db: Session, api_id: int):
     """根据API ID批量删除结果（通过instance_id关联）"""
     from models.api_instance_model import ApiInstance
-    # 先找到该 API 下所有的 instance_id
+    """先找到该 API 下所有的 instance_id"""
     instance_ids = db.query(ApiInstance.instance_id).filter(ApiInstance.api_id == api_id).all()
     iid_list = [iid[0] for iid in instance_ids]
     
@@ -214,7 +214,7 @@ async def get_latest_result_by_api_id(db: Session, api_id: int) -> Optional[dict
     Returns:
         Optional[dict]: 最新结果信息，如果不存在则返回None
     """
-    # 通过instance_id关联到api_id，获取最新的result
+    """通过instance_id关联到api_id，获取最新的result"""
     item = db.query(
                 ApiResult,
                 ApiInstance.instance_name,

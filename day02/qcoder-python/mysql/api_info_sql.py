@@ -94,10 +94,10 @@ async def get_api_info_list(
     Returns:
         Tuple[List[dict], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
+    """计算偏移量"""
     offset = (data.page_num - 1) * data.page_size
     
-    # 查询总数
+    """查询总数"""
     count_stmt = select(func.count()).select_from(ApiInfo).outerjoin(
         ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
     ).outerjoin(
@@ -105,7 +105,7 @@ async def get_api_info_list(
     ).where(*data.filter_params())
     total = db.execute(count_stmt).scalar()
     
-    # 使用JOIN查询关联project_info和token_info表
+    """使用JOIN查询关联project_info和token_info表"""
     items = db.query(
         ApiInfo,
         ProjectInfo.project_name,
@@ -118,7 +118,7 @@ async def get_api_info_list(
         TokenInfo, ApiInfo.token_id == TokenInfo.token_id
     ).filter(*data.filter_params()).order_by(ApiInfo.api_id.desc()).offset(offset).limit(data.page_size).all()
     
-    # 将查询结果转换为ApiInfoInfo对象列表
+    """将查询结果转换为ApiInfoInfo对象列表"""
     result_list = []
     for item in items:
         api_info = item[0]
@@ -160,7 +160,7 @@ async def get_api_info_list_by_project_id(
     Returns:
         List[ApiInfo]: API信息列表
     """
-    # 查询所有符合条件的数据
+    """查询所有符合条件的数据"""
     items = db.query(ApiInfo).filter(
         ApiInfo.project_id == project_id
     ).all()
@@ -178,7 +178,7 @@ async def create_api_info(db: Session, data: dict) -> ApiInfo:
     Returns:
         ApiInfo: 创建的接口信息对象
     """
-    # 自动设置审计字段（创建时间、更新时间）
+    """自动设置审计字段（创建时间、更新时间）"""
     data = set_audit_fields_for_create(data)
     db_obj = ApiInfo(**data)
     db.add(db_obj)
@@ -200,7 +200,7 @@ async def update_api_info(db: Session, api_id: int, data: dict) -> Optional[ApiI
     """
     db_obj = db.query(ApiInfo).filter(ApiInfo.api_id == api_id).first()
     if db_obj:
-        # 自动设置更新时间
+        """自动设置更新时间"""
         data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)

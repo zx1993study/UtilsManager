@@ -58,15 +58,20 @@ async def update_page_info(
 
 @router.delete("/pageInfo/batch", response_model=dict)
 async def delete_page_info_batch(
-    ids: PageInfoIds,  # 页面ID列表，用于指定要删除的页面
-    db: Session = Depends(get_db)  # 数据库会话，通过依赖注入获取
+    ids: PageInfoIds,
+    db: Session = Depends(get_db)
 ):
-    """删除页面信息"""
+    """???????"""
+    """??ID??????????????"""
+    """???????????????"""
     return await delete_page_info_batch_service(db, ids.ids)
+
 @router.delete("/pageInfo/{item_id}", response_model=dict)
 async def delete_page_info(
-    item_id: int,  # 页面ID，用于指定要删除的页面
-    db: Session = Depends(get_db)  # 数据库会话，通过依赖注入获取
+    item_id: int,
+    db: Session = Depends(get_db)
 ):
-    """删除页面信息"""
+    """???????"""
+    """??ID????????????"""
+    """???????????????"""
     return await delete_page_info_service(db, item_id)

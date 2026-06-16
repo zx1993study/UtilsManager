@@ -27,7 +27,7 @@ async def get_api_result_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "API结果不存在"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ApiResultInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -36,10 +36,10 @@ async def get_api_result_list_service(db: Session, page_num: int = 1, page_size:
     """获取API结果列表"""
     items, total = await get_api_result_list(db, page_num, page_size,ApiResultList=ApiResultList)
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_items = [ApiResultInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -52,7 +52,7 @@ async def get_api_result_list_service(db: Session, page_num: int = 1, page_size:
 
 async def create_api_result_service(db: Session, data: ApiResultCreate):
     """创建API结果"""
-    # TODO: 添加业务逻辑校验
+    """TODO: 添加业务逻辑校验"""
     
     obj = await create_api_result(db, data.model_dump(by_alias=False))
     
@@ -61,7 +61,7 @@ async def create_api_result_service(db: Session, data: ApiResultCreate):
 
 async def update_api_result_service(db: Session,  data: ApiResultUpdate):
     """更新API结果"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_api_result_by_id(db, data.result_id)
     if not existing:
         return error_response(
@@ -98,7 +98,7 @@ async def delete_api_result_batch_service(db: Session, ids: list[int]):
 
 async def delete_api_result_service(db: Session, item_id: int):
     """删除API结果"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_api_result_by_id(db, item_id)
     if not existing:
         return error_response(
@@ -124,7 +124,7 @@ async def get_latest_result_by_api_id_service(db: Session, api_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "未找到API的最新结果"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ApiResultInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -138,6 +138,6 @@ async def get_latest_result_by_instance_id_service(db: Session, instance_id: int
             error='{"errorCode": "NOT_FOUND", "message": "未找到实例的最新结果"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = ApiResultInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)

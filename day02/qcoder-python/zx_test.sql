@@ -342,7 +342,11 @@ INSERT INTO `dict_info` (`dict_name`, `dict_key`, `dict_value`, `type`, `status`
 ('定位方式', '1', 'ID', 5, 1, 'admin', NOW(), NOW()),
 ('定位方式', '2', 'Name', 5, 1, 'admin', NOW(), NOW()),
 ('定位方式', '3', 'XPath', 5, 1, 'admin', NOW(), NOW()),
-('定位方式', '4', 'CSS Selector', 5, 1, 'admin', NOW(), NOW());
+('定位方式', '4', 'CSS Selector', 5, 1, 'admin', NOW(), NOW()),
+('Playwright配置', 'playwright_headless', 'false', 9, 1, 'admin', NOW(), NOW()),
+('Playwright配置', 'playwright_slow_mo', '300', 9, 1, 'admin', NOW(), NOW()),
+('Playwright配置', 'playwright_retry_count', '0', 9, 1, 'admin', NOW(), NOW()),
+('Playwright配置', 'playwright_browser_timeout', '0', 9, 1, 'admin', NOW(), NOW());
 
 INSERT INTO `project_info` (`project_name`, `project_address`, `project_port`, `project_env`, `remark`, `status`, `creator`, `create_time`, `update_time`) VALUES
 ('电商后台管理系统', '192.168.1.100', '8080', '开发环境', '主要用于内部功能开发和联调', 1, 'admin', NOW(), NOW()),

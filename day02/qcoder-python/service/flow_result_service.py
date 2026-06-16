@@ -25,7 +25,7 @@ async def get_flow_result_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "流程结果不存在"}'
         )
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_obj = FlowResultInfo.model_validate(obj)
     return success_response(msg="查询成功", data=schema_obj)
 
@@ -34,10 +34,10 @@ async def get_flow_result_list_service(db: Session, page_num: int = 1, page_size
     """获取流程结果列表"""
     items, total = await get_flow_result_list(db, page_num, page_size)
     
-    # 将ORM对象转换为Schema对象
+    """将ORM对象转换为Schema对象"""
     schema_items = [FlowResultInfo.model_validate(item) for item in items]
     
-    # 构建分页响应
+    """构建分页响应"""
     page_data = create_page_response(
         items=schema_items,
         total=total,
@@ -58,7 +58,7 @@ async def create_flow_result_service(db: Session, data: FlowResultCreate):
 
 async def update_flow_result_service(db: Session, item_id: int, data: FlowResultUpdate):
     """更新流程结果"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_flow_result_by_id(db, item_id)
     if not existing:
         return error_response(
@@ -74,7 +74,7 @@ async def update_flow_result_service(db: Session, item_id: int, data: FlowResult
 
 async def delete_flow_result_service(db: Session, item_id: int):
     """删除流程结果"""
-    # 校验是否存在
+    """校验是否存在"""
     existing = await get_flow_result_by_id(db, item_id)
     if not existing:
         return error_response(

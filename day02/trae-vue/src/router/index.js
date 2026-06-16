@@ -15,14 +15,14 @@ const routes = [
     path: '/',
     redirect: '/dashboard'
   },
-  // 仪表盘（一级菜单）
+  // 仪表盘一级菜单
   {
     path: '/dashboard',
     component: Layout,
     meta: { title: '仪表盘', icon: 'Odometer' },
     children: [
       {
-        // 空 path 作为 /dashboard 的默认子路由，避免与父路由同名（消除 vue-router 重复路径告警）
+        // 空 path 作为 /dashboard 的默认子路由，避免与父路由同名
         path: '',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index.vue'),
@@ -158,7 +158,7 @@ const routes = [
         path: '/page/template',
         name: 'PageTemplate',
         component: () => import('@/views/page/template/index.vue'),
-        meta: { title: '元素模板', icon: 'Document', hidden: true }
+        meta: { title: '元素模板', icon: 'Document' }
       },
       {
         path: '/page/function-detail/:pageId',
@@ -177,7 +177,25 @@ const routes = [
         name: 'PageResult',
         component: () => import('@/views/page/result/index.vue'),
         meta: { title: '结果管理', icon: 'DataAnalysis' }
+      },
+      {
+        path: '/page/result-detail/:resultId',
+        name: 'PageResultDetail',
+        component: () => import('@/views/page/result/detail.vue'),
+        meta: { title: '页面结果详情', hidden: true }
       }
+    ]
+  },
+  {
+    path: '/app',
+    component: Layout,
+    redirect: '/app/function',
+    meta: { title: 'App自动化', icon: 'Cellphone' },
+    children: [
+      { path: '/app/function', name: 'AppFunction', component: () => import('@/views/app/function/index.vue'), meta: { title: 'App功能', icon: 'Menu' } },
+      { path: '/app/template', name: 'AppTemplate', component: () => import('@/views/app/template/index.vue'), meta: { title: 'App模板', icon: 'Document' } },
+      { path: '/app/testcase', name: 'AppTestcase', component: () => import('@/views/app/testcase/index.vue'), meta: { title: '测试用例', icon: 'Files' } },
+      { path: '/app/result', name: 'AppResult', component: () => import('@/views/app/result/index.vue'), meta: { title: '结果管理', icon: 'DataAnalysis' } }
     ]
   },
   // 流程管理
@@ -241,7 +259,7 @@ const router = createRouter({
   routes
 })
 
-// 本次会话是否已向后端校验过 token（避免每次导航都请求）
+// 本次会话是否已经向后端校验过 token，避免每次导航都请求
 let tokenValidated = false
 
 // 路由守卫
@@ -249,13 +267,13 @@ router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
   const token = userStore.token || localStorage.getItem('token')
 
-  // 未登录：只放行登录页，其余一律去登录
+  // 未登录时只放行登录页，其余页面跳转到登录页
   if (!token) {
     tokenValidated = false
     return to.path === '/login' ? next() : next('/login')
   }
 
-  // 有 token：首屏向后端校验一次，过滤掉残留/伪造/过期的 token
+  // 有 token 时首屏向后端校验一次，过滤残留、伪造或过期 token
   if (!tokenValidated) {
     tokenValidated = true
     try {
@@ -267,13 +285,13 @@ router.beforeEach(async (to, from, next) => {
         return next('/login')
       }
     } catch (error) {
-      // 401/网络异常等：清登录态，回登录页
+      // 401 或网络异常时清理登录态，回到登录页
       userStore.logout()
       return next('/login')
     }
   }
 
-  // 已登录且校验通过：访问登录页时跳回仪表盘
+  // 已登录且校验通过时，访问登录页跳回仪表盘
   if (to.path === '/login') {
     return next('/dashboard')
   }
@@ -281,3 +299,4 @@ router.beforeEach(async (to, from, next) => {
 })
 
 export default router
+

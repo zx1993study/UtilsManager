@@ -15,7 +15,7 @@ def run(playwright: Playwright) -> None:
     page.get_by_role("button", name="取消").click()
     page.get_by_text("活动管理").click()
     page.get_by_role("link", name="活动方案").click()
-    page.get_by_role("button", name="更多 ").click()
+    page.get_by_role("button", name="更多").click()
     page.get_by_text("新增").click()
     page.get_by_role("dialog", name="添加活动").get_by_placeholder("请输入活动名称").dblclick()
     page.get_by_role("dialog", name="添加活动").get_by_placeholder("请输入活动名称").fill("测试2")

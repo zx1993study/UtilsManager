@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from models.dict_info_model import DictInfo
 from typing import List, Optional, Tuple
+from schemas.dict_info_schemas import DictInfoList
+from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
 
 
 async def get_dict_info_by_id(db: Session, dict_id: int) -> Optional[DictInfo]:
@@ -36,30 +38,39 @@ async def get_dict_info_by_unique_fields(
     ).first()
 
 
+async def get_active_dict_info_by_key(db: Session, dict_key: str) -> Optional[DictInfo]:
+    """根据 dict_key 获取启用的字典配置。"""
+    return db.query(DictInfo).filter(
+        DictInfo.dict_key == dict_key,
+        DictInfo.status == 1,
+    ).order_by(DictInfo.dict_id.desc()).first()
+
+
 async def get_dict_info_list(
     db: Session, 
-    page_num: int = 1, 
-    page_size: int = 10
+    filter: DictInfoList
 ) -> Tuple[List[DictInfo], int]:
     """获取字典信息分页列表
     
     Returns:
         Tuple[List[DictInfo], int]: (数据列表, 总记录数)
     """
-    # 计算偏移量
-    offset = (page_num - 1) * page_size
+    """计算偏移量"""
+    offset = (filter.page_num - 1) * filter.page_size
+    base_query = db.query(DictInfo).filter(*filter.filter_params())
     
-    # 查询总数
-    total = db.query(func.count(DictInfo.dict_id)).scalar()
+    """查询总数"""
+    total = base_query.with_entities(func.count(DictInfo.dict_id)).scalar()
     
-    # 查询分页数据
-    items = db.query(DictInfo).offset(offset).limit(page_size).all()
+    """查询分页数据"""
+    items = base_query.order_by(DictInfo.dict_id.desc()).offset(offset).limit(filter.page_size).all()
     
     return items, total
 
 
 async def create_dict_info(db: Session, data: dict) -> DictInfo:
     """创建字典信息"""
+    data = set_audit_fields_for_create(data)
     db_obj = DictInfo(**data)
     db.add(db_obj)
     db.commit()
@@ -71,11 +82,24 @@ async def update_dict_info(db: Session, dict_id: int, data: dict) -> Optional[Di
     """更新字典信息"""
     db_obj = db.query(DictInfo).filter(DictInfo.dict_id == dict_id).first()
     if db_obj:
+        data = set_audit_fields_for_update(data)
         for key, value in data.items():
             setattr(db_obj, key, value)
         db.commit()
         db.refresh(db_obj)
     return db_obj
+
+
+async def delete_dict_info_batch(db: Session, ids: List[int]) -> int:
+    """批量删除字典信息"""
+    if not ids:
+        return 0
+    count = db.query(DictInfo).filter(
+        DictInfo.dict_id.in_(ids)
+    ).delete(synchronize_session=False)
+    if count:
+        db.commit()
+    return count
 
 
 async def delete_dict_info(db: Session, dict_id: int) -> Optional[DictInfo]:

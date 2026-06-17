@@ -47,13 +47,13 @@ const routes = [
         path: '/system/dept',
         name: 'SystemDept',
         component: () => import('@/views/system/dept/index.vue'),
-        meta: { title: '部门管理', icon: 'OfficeBuilding' }
+        meta: { title: '部门管理', icon: 'OfficeBuilding', hidden: true }
       },
       {
         path: '/system/role',
         name: 'SystemRole',
         component: () => import('@/views/system/role/index.vue'),
-        meta: { title: '角色管理', icon: 'Avatar' }
+        meta: { title: '角色管理', icon: 'Avatar', hidden: true }
       },
       {
         path: '/system/dict',

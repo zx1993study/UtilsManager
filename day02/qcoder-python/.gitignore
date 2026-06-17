@@ -10,4 +10,7 @@ tests/
 .idea/
 .pytest_cache/
 logs/
+.playwright_screenshots/
+.playwright_codes/
+
 

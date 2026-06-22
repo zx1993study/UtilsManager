@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
-tests/
+test/
 .qodercn/
 .env
 .vscode/

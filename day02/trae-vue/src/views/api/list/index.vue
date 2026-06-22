@@ -7,6 +7,8 @@
       :pagination="pagination"
       :search-fields="searchFields"
       :show-selection="true"
+      :show-row-edit="false"
+      :show-row-delete="false"
       row-key="apiId"
       @add="handleAdd"
       @edit="handleEdit"
@@ -31,26 +33,32 @@
           <el-icon><VideoPlay /></el-icon>
           <span>运行</span>
         </el-button>
-        
-        <el-button
-          type="primary"
-          size="small"
-          link
-          @click="handleCopy(row)"
-        >
-          <el-icon><DocumentCopy /></el-icon>
-          <span>复制</span>
-        </el-button>
-        
-        <el-button
-          type="primary"
-          size="small"
-          link
-          @click="handleAddTestcase(row)"
-        >
-          <el-icon><Files /></el-icon>
-          <span>用例</span>
-        </el-button>
+        <el-dropdown trigger="click" @command="command => handleMoreCommand(command, row)">
+          <el-button type="primary" size="small" link>
+            <span>更多</span>
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="edit">
+                <el-icon><Edit /></el-icon>
+                <span>编辑</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="copy">
+                <el-icon><DocumentCopy /></el-icon>
+                <span>复制</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="testcase">
+                <el-icon><Files /></el-icon>
+                <span>用例</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="delete">
+                <el-icon><Delete /></el-icon>
+                <span>删除</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </template>
     </common-table>
 
@@ -106,12 +114,15 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="Token" prop="tokenId">
+      <el-form-item label="Token" prop="tokenIds">
         <el-select filterable
-          v-model="formData.tokenId"
+          v-model="formData.tokenIds"
           placeholder="请先选择项目再选择Token"
           style="width: 100%"
           :disabled="!formData.projectId"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
         >
           <el-option
             v-for="item in tokenOptions"
@@ -184,13 +195,16 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="Token" prop="tokenId">
+      <el-form-item label="Token" prop="tokenIds">
         <el-select filterable
-          v-model="copyFormData.tokenId"
+          v-model="copyFormData.tokenIds"
           placeholder="请先选择项目再选择Token"
           style="width: 100%"
           :disabled="!copyFormData.projectId"
           clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
         >
           <el-option
             v-for="item in tokenOptions"
@@ -213,7 +227,7 @@ import { ref, reactive, onMounted } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Files, DocumentCopy } from '@element-plus/icons-vue'
+import { ArrowDown, VideoPlay, Files, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue'
 import * as projectApi from '@/api/project/project'
 import * as tokenApi from '@/api/project/token'
 import * as apiApi from '@/api/api/api'
@@ -223,6 +237,7 @@ import { handleApiResponse } from '@/utils/responseHandler'
 const tableRef = ref(null)
 const submitLoading = ref(false)
 const router = useRouter()
+const API_TOKEN_TYPE = 1
 
 // 下拉框选项
 const projectOptions = ref([])
@@ -272,6 +287,7 @@ const formData = reactive({
   requestHeader: '{"content-type":"application/json"}',
   projectId: null,
   tokenId: null,
+  tokenIds: [],
   remark: ''
 })
 
@@ -287,6 +303,7 @@ const copyFormData = reactive({
   requestHeader: '{"content-type":"application/json"}',
   projectId: null,
   tokenId: null,
+  tokenIds: [],
   remark: ''
 })
 
@@ -323,11 +340,50 @@ const getMethodTypeColor = (type) => {
   return colors[type] || 'info'
 }
 
+const normalizeTokenIds = (row = {}) => {
+  if (Array.isArray(row.tokenIds)) {
+    return row.tokenIds.filter(Boolean)
+  }
+  return row.tokenId ? [row.tokenId] : []
+}
+
+const buildApiPayload = (data) => {
+  const tokenIds = Array.isArray(data.tokenIds) ? data.tokenIds.filter(Boolean) : []
+  return {
+    ...data,
+    tokenIds,
+    tokenId: tokenIds[0] || null
+  }
+}
+
+const getListItems = (res) => res.data?.items || res.data?.list || res.data || []
+
+const loadApiTokenOptions = async (projectId) => {
+  if (!projectId) {
+    tokenOptions.value = []
+    return
+  }
+  const res = await tokenApi.getTokenOptions({
+    projectId,
+    tokenType: API_TOKEN_TYPE,
+  })
+  tokenOptions.value = getListItems(res)
+}
+
+const keepAvailableTokenIds = (targetForm) => {
+  const availableIds = new Set(tokenOptions.value.map(item => item.tokenId))
+  const tokenIds = Array.isArray(targetForm.tokenIds)
+    ? targetForm.tokenIds.filter(tokenId => availableIds.has(tokenId))
+    : []
+  targetForm.tokenIds = tokenIds
+  targetForm.tokenId = tokenIds[0] || null
+}
+
 // 加载项目下拉列表
 const loadProjectOptions = async () => {
   try {
     const res = await projectApi.getProjectList({ page: 1, pageSize: 1000 })
-    projectOptions.value = res.data?.items || res.data?.list || res.data || []
+    projectOptions.value = getListItems(res)
   } catch (error) {
     console.error('加载项目列表失败:', error)
   }
@@ -337,13 +393,13 @@ const loadProjectOptions = async () => {
 const handleProjectChange = async (projectId) => {
   // 清空已选的Token
   formData.tokenId = null
+  formData.tokenIds = []
   tokenOptions.value = []
 
   if (!projectId) return
 
   try {
-    const res = await tokenApi.getTokenList({ projectId, pageNum: 1, pageSize: 1000 })
-    tokenOptions.value = res.data?.items || res.data?.list || res.data || []
+    await loadApiTokenOptions(projectId)
   } catch (error) {
     console.error('加载Token列表失败:', error)
   }
@@ -352,6 +408,7 @@ const handleProjectChange = async (projectId) => {
 // 复制弹窗项目切换
 const handleCopyProjectChange = async (projectId) => {
   copyFormData.tokenId = null
+  copyFormData.tokenIds = []
   
   if (!projectId) {
     tokenOptions.value = []
@@ -359,8 +416,7 @@ const handleCopyProjectChange = async (projectId) => {
   }
 
   try {
-    const res = await tokenApi.getTokenList({ projectId, pageNum: 1, pageSize: 1000 })
-    tokenOptions.value = res.data?.items || res.data?.list || res.data || []
+    await loadApiTokenOptions(projectId)
   } catch (error) {
     console.error('加载Token列表失败:', error)
   }
@@ -378,13 +434,15 @@ const handleAdd = () => {
 const handleEdit = async (row) => {
   dialogTitle.value = '编辑API'
   Object.assign(formData, row)
+  formData.tokenIds = normalizeTokenIds(row)
+  formData.tokenId = formData.tokenIds[0] || null
   dialogVisible.value = true
 
   // 如果已有项目ID，加载对应的Token列表
   if (row.projectId) {
     try {
-      const res = await tokenApi.getTokenList({ projectId: row.projectId, pageNum: 1, pageSize: 1000 })
-      tokenOptions.value = res.data?.items || res.data?.list || res.data || []
+      await loadApiTokenOptions(row.projectId)
+      keepAvailableTokenIds(formData)
     } catch (error) {
       console.error('加载Token列表失败:', error)
     }
@@ -410,7 +468,8 @@ const handleDelete = (row) => {
 }
 
 // 处理复制
-const handleCopy = (row) => {
+const handleCopy = async (row) => {
+  const tokenIds = normalizeTokenIds(row)
   // 填充复制表单数据
   Object.assign(copyFormData, {
     apiId: null, // 清空ID，因为是新增
@@ -420,13 +479,16 @@ const handleCopy = (row) => {
     paramsPath: row.paramsPath,
     requestHeader: row.requestHeader,
     projectId: row.projectId,
-    tokenId: row.tokenId,
+    tokenId: tokenIds[0] || null,
+    tokenIds,
     remark: row.remark
   })
   
   // 加载Token列表
   if (row.projectId) {
-    handleCopyProjectChange(row.projectId)
+    await handleCopyProjectChange(row.projectId)
+    copyFormData.tokenIds = tokenIds
+    copyFormData.tokenId = tokenIds[0] || null
   }
   
   copyDialogVisible.value = true
@@ -436,7 +498,7 @@ const handleCopy = (row) => {
 const handleCopySubmit = async () => {
   try {
     copySubmitLoading.value = true
-    const res = await apiApi.addApi(copyFormData)
+    const res = await apiApi.addApi(buildApiPayload(copyFormData))
     if (handleApiResponse(res, '复制成功', '复制失败')) {
       copyDialogVisible.value = false
       tableRef.value?.refresh()
@@ -473,10 +535,11 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     let res
+    const payload = buildApiPayload(formData)
     if (formData.apiId) {
-      res = await apiApi.updateApi(formData)
+      res = await apiApi.updateApi(payload)
     } else {
-      res = await apiApi.addApi(formData)
+      res = await apiApi.addApi(payload)
     }
     if (handleApiResponse(res, formData.apiId ? '编辑成功' : '新增成功', '提交失败')) {
       dialogVisible.value = false
@@ -498,6 +561,7 @@ const resetForm = () => {
     methodType: 1,
     projectId: null,
     tokenId: null,
+    tokenIds: [],
     remark: ''
   })
 }
@@ -527,6 +591,16 @@ const handleAddTestcase = (row) => {
       methodUrl: row.methodUrl
     }
   })
+}
+
+const handleMoreCommand = (command, row) => {
+  const actions = {
+    edit: handleEdit,
+    copy: handleCopy,
+    testcase: handleAddTestcase,
+    delete: handleDelete
+  }
+  actions[command]?.(row)
 }
 
 // 页面加载时获取项目列表

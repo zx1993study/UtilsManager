@@ -8,6 +8,9 @@
       :search-fields="searchFields"
       :show-copy="true"
       :show-selection="true"
+      :show-row-edit="false"
+      :show-row-copy="false"
+      :show-row-delete="false"
       :operation-width="390"
       row-key="pageId"
       @add="handleAdd"
@@ -34,10 +37,32 @@
           <el-icon><MagicStick /></el-icon>
           <span>解析页面</span>
         </el-button>
-        <el-button type="info" size="small" link @click="handleDetail(row)">
-          <el-icon><View /></el-icon>
-          <span>查看详情</span>
-        </el-button>
+        <el-dropdown trigger="click" @command="command => handleMoreCommand(command, row)">
+          <el-button type="primary" size="small" link>
+            <span>更多</span>
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="detail">
+                <el-icon><View /></el-icon>
+                <span>查看详情</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="edit">
+                <el-icon><Edit /></el-icon>
+                <span>编辑</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="copy">
+                <el-icon><CopyDocument /></el-icon>
+                <span>复制</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="delete">
+                <el-icon><Delete /></el-icon>
+                <span>删除</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </template>
     </common-table>
 
@@ -73,11 +98,14 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="信息Token" prop="tokenId">
+      <el-form-item label="信息Token" prop="tokenIds">
         <el-select
-          v-model="formData.tokenId"
+          v-model="formData.tokenIds"
           filterable
           clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
           placeholder="请选择信息Token"
           style="width: 100%"
           :disabled="!formData.projectId"
@@ -106,13 +134,13 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { MagicStick, View } from '@element-plus/icons-vue'
+import { ArrowDown, MagicStick, View, Edit, CopyDocument, Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import * as pageFunctionApi from '@/api/page/page-function'
 import { getProjectList } from '@/api/project/project'
-import { getTokenList } from '@/api/project/token'
+import { getTokenOptions } from '@/api/project/token'
 import { handleApiResponse } from '@/utils/responseHandler'
 
 const router = useRouter()
@@ -128,6 +156,7 @@ const parsingPageId = ref(null)
 const columns = [
   { prop: 'pageName', label: '功能名称', minWidth: 180 },
   { prop: 'pageUrl', label: '页面地址', minWidth: 240 },
+  { prop: 'tokenName', label: '信息Token', minWidth: 160, showOverflowTooltip: true },
   { prop: 'status', label: '状态', width: 90, slot: 'status' },
   { prop: 'createTime', label: '创建时间', width: 180 }
 ]
@@ -158,6 +187,7 @@ const formData = reactive({
   pageUrl: '',
   projectId: null,
   tokenId: null,
+  tokenIds: [],
   remark: '',
   status: 1
 })
@@ -184,11 +214,9 @@ const loadTokenOptions = async (projectId) => {
     return
   }
   try {
-    const res = await getTokenList({
+    const res = await getTokenOptions({
       projectId,
-      tokenType: 2,
-      pageNum: 1,
-      pageSize: 100
+      tokenType: 2
     })
     tokenOptions.value = res.data?.items || res.data?.list || res.data || []
   } catch (error) {
@@ -201,8 +229,16 @@ const buildTokenLabel = (token) => {
   return `${token.name || token.tokenId}${fileName}`
 }
 
+const normalizeTokenIds = (row = {}) => {
+  if (Array.isArray(row.tokenIds)) {
+    return row.tokenIds.filter(Boolean)
+  }
+  return row.tokenId ? [row.tokenId] : []
+}
+
 const handleProjectChange = (projectId) => {
   formData.tokenId = null
+  formData.tokenIds = []
   loadTokenOptions(projectId)
 }
 
@@ -213,6 +249,7 @@ const resetForm = () => {
     pageUrl: '',
     projectId: null,
     tokenId: null,
+    tokenIds: [],
     remark: '',
     status: 1
   })
@@ -236,6 +273,7 @@ const handleEdit = (row) => {
     pageUrl: row.pageUrl || '',
     projectId: row.projectId || null,
     tokenId: row.tokenId || null,
+    tokenIds: normalizeTokenIds(row),
     remark: row.remark || '',
     status: row.status ?? 1
   })
@@ -252,6 +290,7 @@ const handleCopy = (row) => {
     pageUrl: row.pageUrl || '',
     projectId: row.projectId || null,
     tokenId: row.tokenId || null,
+    tokenIds: normalizeTokenIds(row),
     remark: row.remark || '',
     status: row.status ?? 1
   })
@@ -324,6 +363,16 @@ const handleDetail = (row) => {
   })
 }
 
+const handleMoreCommand = (command, row) => {
+  const actions = {
+    detail: handleDetail,
+    edit: handleEdit,
+    copy: handleCopy,
+    delete: handleDelete
+  }
+  actions[command]?.(row)
+}
+
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
@@ -331,7 +380,8 @@ const handleSubmit = async () => {
       pageName: formData.pageName,
       pageUrl: formData.pageUrl,
       projectId: formData.projectId,
-      tokenId: formData.tokenId,
+      tokenIds: formData.tokenIds,
+      tokenId: formData.tokenIds[0] || null,
       remark: formData.remark,
       status: formData.status
     }

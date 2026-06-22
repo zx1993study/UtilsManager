@@ -10,6 +10,7 @@ from schemas.token_info_schemas import TokenInfoCreate, TokenInfoIds, TokenInfoL
 from service.token_info_service import (
     get_token_info_service,
     get_token_info_list_service,
+    get_token_info_options_service,
     create_token_info_service,
     update_token_info_service,
     delete_token_info_service,
@@ -27,6 +28,22 @@ async def list_token_info(
 ):
     """获取Token信息分页列表"""
     return await get_token_info_list_service(db, filter = search_params)
+
+
+@router.get("/tokenInfo/options", response_model=dict)
+async def list_token_info_options(
+    token_type: int = Query(..., alias="tokenType", description="来源 1 api 2 web"),
+    project_id: int | None = Query(None, alias="projectId", description="项目ID"),
+    name: str | None = Query(None, description="Token名称"),
+    db: Session = Depends(get_db)
+):
+    """获取Token下拉框列表，来源必填"""
+    return await get_token_info_options_service(
+        db=db,
+        token_type=token_type,
+        project_id=project_id,
+        name=name
+    )
 
 
 @router.post("/tokenInfo", response_model=dict)

@@ -3,6 +3,32 @@ import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import router from '@/router'
 
+const NETWORK_RETRY_COUNT = 1
+const NETWORK_RETRY_DELAY = 300
+const MESSAGE_DEDUP_INTERVAL = 1500
+let lastMessage = ''
+let lastMessageAt = 0
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+const isIdempotentMethod = (method = 'get') => {
+  return ['get', 'head', 'options'].includes(String(method).toLowerCase())
+}
+
+const isNetworkError = (error) => {
+  return !error.response || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK'
+}
+
+const showErrorMessage = (message) => {
+  const now = Date.now()
+  if (message === lastMessage && now - lastMessageAt < MESSAGE_DEDUP_INTERVAL) {
+    return
+  }
+  lastMessage = message
+  lastMessageAt = now
+  ElMessage.error(message)
+}
+
 // 创建axios实例
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -43,7 +69,7 @@ request.interceptors.response.use(
     
     // 统一处理业务状态码
     if (res.code !== 200 && res.code !== undefined) {
-      ElMessage.error(res.message || '请求失败')
+      showErrorMessage(res.message || '请求失败')
       
       // token过期或无效，跳转到登录页
       if (res.code === 401) {
@@ -54,7 +80,7 @@ request.interceptors.response.use(
       
       // 权限不足
       if (res.code === 403) {
-        ElMessage.error('权限不足，无法访问')
+        showErrorMessage('权限不足，无法访问')
       }
       
       return Promise.reject(new Error(res.message || '请求失败'))
@@ -64,6 +90,13 @@ request.interceptors.response.use(
   },
   error => {
     console.error('响应错误:', error)
+    const config = error.config || {}
+    const retryCount = config.__retryCount || 0
+
+    if (isNetworkError(error) && isIdempotentMethod(config.method) && retryCount < NETWORK_RETRY_COUNT) {
+      config.__retryCount = retryCount + 1
+      return sleep(NETWORK_RETRY_DELAY).then(() => request(config))
+    }
     
     let message = '网络错误'
     
@@ -105,7 +138,9 @@ request.interceptors.response.use(
       message = '网络连接异常，请检查网络'
     }
     
-    ElMessage.error(message)
+    if (!config.silent) {
+      showErrorMessage(message)
+    }
     return Promise.reject(error)
   }
 )

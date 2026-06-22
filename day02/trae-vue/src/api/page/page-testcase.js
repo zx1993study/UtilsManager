@@ -79,26 +79,26 @@ export function batchDeletePageTestCase(ids) {
 export const batchDeletePageTestcase = batchDeletePageTestCase
 
 // 执行页面测试用例
-export function executePageTestCase(pageId, id) {
-  const requestId = `page-run-${pageId}-${id}-${Date.now()}`
-  const key = `page:${pageId}:instances:${id}`
+export function executePageTestCase(pageId, id, tokenId = null) {
+  const requestId = `page-run-${pageId}-${id}-${tokenId || 'default'}-${Date.now()}`
+  const key = `page:${pageId}:instances:${id}:token:${tokenId || 'default'}`
   return executeOnce(key, () => request({
     url: '/api/v1/page/execute_by_template',
     method: 'post',
-    data: { pageId, instanceIds: [id], requestId },
+    data: { pageId, instanceIds: [id], tokenId, requestId },
     timeout: EXECUTE_TIMEOUT
   }))
 }
 
 // 批量执行页面测试用例
-export function batchExecutePageTestCase(pageId, ids) {
+export function batchExecutePageTestCase(pageId, ids, tokenId = null) {
   const instanceIds = [...new Set((ids || []).filter(id => id !== null && id !== undefined))]
-  const requestId = `page-run-${pageId}-${instanceIds.join('-')}-${Date.now()}`
-  const key = `page:${pageId}:instances:${instanceIds.join(',')}`
+  const requestId = `page-run-${pageId}-${instanceIds.join('-')}-${tokenId || 'default'}-${Date.now()}`
+  const key = `page:${pageId}:instances:${instanceIds.join(',')}:token:${tokenId || 'default'}`
   return executeOnce(key, () => request({
     url: '/api/v1/page/execute_by_template',
     method: 'post',
-    data: { pageId, instanceIds, requestId },
+    data: { pageId, instanceIds, tokenId, requestId },
     timeout: EXECUTE_TIMEOUT
   }))
 }

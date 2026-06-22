@@ -23,6 +23,7 @@ class PageInfoBase(BaseModel):
     file_name: Optional[str] = Field(None, description="功能代码文件名称")
     real_file_name: Optional[str] = Field(None, description="功能代码文件名称")
     token_id: Optional[int] = Field(None, description="tokenId")
+    token_ids: Optional[list[int]] = Field(None, description="tokenIds")
     function: Optional[str] = Field(None, description="功能")
     status: Optional[int] = Field(1, description="状态")
     remark: Optional[str] = Field(None, description="备注")
@@ -45,6 +46,8 @@ class PageInfoIds(PageInfoBase):
 class PageInfoInfo(PageInfoBase):
     """页面信息响应Schema"""
     page_id: Optional[int] = Field(None, description="主键")
+    token_name: Optional[str] = Field(None, description="Token名称")
+    token_names: Optional[list[str]] = Field(None, description="Token名称列表")
     creator: Optional[str] = Field(None, description="创建人")
     create_time: Optional[datetime] = Field(None, description="创建时间")
     update_time: Optional[datetime] = Field(None, description="更新时间")

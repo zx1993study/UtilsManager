@@ -8,9 +8,32 @@ from sqlalchemy import and_, func, select
 from models.api_info_model import ApiInfo
 from models.project_info_model import ProjectInfo
 from models.token_info_model import TokenInfo
+from mysql.api_token_info_sql import get_api_tokens
 from typing import List, Optional, Tuple
-from schemas.api_info_schemas import ApiInfoInfo, ApiInfoList
+from schemas.api_info_schemas import ApiInfoInfo, ApiInfoList, ApiInfoOption, ApiInfoOptionQuery
 from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
+
+
+async def _get_response_tokens(db: Session, api_info: ApiInfo) -> list[TokenInfo]:
+    tokens = await get_api_tokens(db, api_info.api_id)
+    if not tokens and api_info.token_id:
+        token = db.query(TokenInfo).filter(TokenInfo.token_id == api_info.token_id).first()
+        if token:
+            tokens = [token]
+    return tokens
+
+
+def _token_response_fields(api_info: ApiInfo, tokens: list[TokenInfo]) -> dict:
+    token_ids = [token.token_id for token in tokens]
+    token_names = [token.name for token in tokens if token.name]
+    first_token = tokens[0] if tokens else None
+    return {
+        "token_id": token_ids[0] if token_ids else api_info.token_id,
+        "token_ids": token_ids,
+        "token_name": "，".join(token_names),
+        "token_names": token_names,
+        "token": first_token.token if first_token else None,
+    }
 
 
 async def get_api_info_by_id(db: Session, api_id: int) -> Optional[ApiInfo]:
@@ -31,13 +54,15 @@ async def get_api_info_by_id(db: Session, api_id: int) -> Optional[ApiInfo]:
         return None
         
     api_info = item[0]
+    token_fields = _token_response_fields(api_info, await _get_response_tokens(db, api_info))
     result = ApiInfoInfo(
         api_id=api_info.api_id,
         api_name=api_info.api_name,
         method_type=api_info.method_type,
         method_url=api_info.method_url,
         project_id=api_info.project_id,
-        token_id=api_info.token_id,
+        token_id=token_fields["token_id"],
+        token_ids=token_fields["token_ids"],
         request_header=api_info.request_header,
         params_path=api_info.params_path,
         description=api_info.description,
@@ -47,8 +72,9 @@ async def get_api_info_by_id(db: Session, api_id: int) -> Optional[ApiInfo]:
         update_time=api_info.update_time,
         project_name=item[1],
         project_address=item[2],
-        token_name=item[3],
-        token=item[4]
+        token_name=token_fields["token_name"],
+        token_names=token_fields["token_names"],
+        token=token_fields["token"]
     )
     return result
 
@@ -122,13 +148,15 @@ async def get_api_info_list(
     result_list = []
     for item in items:
         api_info = item[0]
+        token_fields = _token_response_fields(api_info, await _get_response_tokens(db, api_info))
         result_dict = ApiInfoInfo(
             api_id=api_info.api_id,
             api_name=api_info.api_name,
             method_type=api_info.method_type,
             method_url=api_info.method_url,
             project_id=api_info.project_id,
-            token_id=api_info.token_id,
+            token_id=token_fields["token_id"],
+            token_ids=token_fields["token_ids"],
             request_header=api_info.request_header,
             params_path=api_info.params_path,
             description=api_info.description,
@@ -138,12 +166,32 @@ async def get_api_info_list(
             update_time=api_info.update_time,
             project_name=item[1],
             project_address=item[2],
-            token_name=item[3],
-            token=item[4]
+            token_name=token_fields["token_name"],
+            token_names=token_fields["token_names"],
+            token=token_fields["token"]
         )
         result_list.append(result_dict)
     
     return result_list, total
+
+
+async def get_api_info_options(db: Session, data: ApiInfoOptionQuery) -> List[ApiInfoOption]:
+    items = db.query(
+        ApiInfo.api_id,
+        ApiInfo.api_name,
+        ApiInfo.method_url,
+        ApiInfo.method_type
+    ).filter(*data.filter_params()).order_by(ApiInfo.api_id.desc()).all()
+
+    return [
+        ApiInfoOption(
+            api_id=item.api_id,
+            api_name=item.api_name,
+            method_url=item.method_url,
+            method_type=item.method_type
+        )
+        for item in items
+    ]
 
 
 

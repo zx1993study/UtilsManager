@@ -14,6 +14,7 @@ class PageInstanceBase(BaseModel):
     )
 
     page_id: Optional[int] = Field(None, description="页面id")
+    token_id: Optional[int] = Field(None, description="tokenId")
     operation_json: Optional[str] = Field(None, description="操作JSON")
     instance_name: Optional[str] = Field(None, description="页面实例名称")
     screen_photo_file: Optional[str] = Field(None, description="页面实例截图文件路径")
@@ -41,6 +42,7 @@ class PageInstanceIds(BaseModel):
 class PageInstanceInfo(PageInstanceBase):
     """页面实例响应 Schema。"""
     page_instance_id: Optional[int] = Field(None, description="主键")
+    token_name: Optional[str] = Field(None, description="Token名称")
     creator: Optional[str] = Field(None, description="创建人")
     create_time: Optional[datetime] = Field(None, description="创建时间")
     update_time: Optional[datetime] = Field(None, description="更新时间")

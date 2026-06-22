@@ -131,13 +131,13 @@ const routes = [
         path: '/api/flow-detail/:flowId',
         name: 'ApiFlowDetail',
         component: () => import('@/views/api/flow-detail/index.vue'),
-        meta: { title: '流程详情', hidden: true }
+        meta: { title: '流程详情', hidden: true, breadcrumbParent: '/api/flow' }
       },
       {
         path: '/api/testcase-detail/:apiId',
         name: 'ApiTestcaseDetail',
         component: () => import('@/views/api/testcase-detail/index.vue'),
-        meta: { title: 'API测试用例详情', hidden: true }
+        meta: { title: 'API测试用例详情', hidden: true, breadcrumbParent: '/api/list' }
       }
     ]
   },
@@ -164,7 +164,7 @@ const routes = [
         path: '/page/function-detail/:pageId',
         name: 'PageFunctionDetail',
         component: () => import('@/views/page/function-detail/index.vue'),
-        meta: { title: '页面功能详情', hidden: true }
+        meta: { title: '页面功能详情', hidden: true, breadcrumbParent: '/page/function' }
       },
       {
         path: '/page/testcase',
@@ -182,7 +182,7 @@ const routes = [
         path: '/page/result-detail/:resultId',
         name: 'PageResultDetail',
         component: () => import('@/views/page/result/detail.vue'),
-        meta: { title: '页面结果详情', hidden: true }
+        meta: { title: '页面结果详情', hidden: true, breadcrumbParent: '/page/result' }
       }
     ]
   },
@@ -277,7 +277,7 @@ router.beforeEach(async (to, from, next) => {
   if (!tokenValidated) {
     tokenValidated = true
     try {
-      const res = await getUserInfo()
+      const res = await getUserInfo({ silent: true })
       if (res && res.success) {
         userStore.setUserInfo(res.data)
       } else {
@@ -285,9 +285,12 @@ router.beforeEach(async (to, from, next) => {
         return next('/login')
       }
     } catch (error) {
-      // 401 或网络异常时清理登录态，回到登录页
-      userStore.logout()
-      return next('/login')
+      // 只有明确未授权才清理登录态；短暂网络波动时保留当前 token，避免切页偶发失败导致退出。
+      if (error?.response?.status === 401) {
+        userStore.logout()
+        return next('/login')
+      }
+      tokenValidated = false
     }
   }
 

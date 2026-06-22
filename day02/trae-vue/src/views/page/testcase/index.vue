@@ -123,6 +123,7 @@ import * as pageTestcaseApi from '@/api/page/page-testcase'
 import { getPageFunctionList } from '@/api/page/page-function'
 import { getProjectList } from '@/api/project/project'
 import { handleApiResponse } from '@/utils/responseHandler'
+import { normalizeJsonObject } from '@/utils/json'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
@@ -383,7 +384,7 @@ const buildPayload = () => {
   return {
     instanceName: formData.instanceName,
     expectResult: formData.expectResult,
-    operationJson: formData.operationJson,
+    operationJson: normalizeJsonObject(formData.operationJson),
     screenPhotoFile: formData.screenPhotoFile,
     pageId: formData.pageId,
     status: 1

@@ -34,6 +34,7 @@ async def run_execute_by_template(data: PageTemplateExecuteRequest, db: Session 
         page_id=data.page_id,
         instance_ids=data.instance_ids,
         db=db,
+        token_id=data.token_id,
         request_id=data.request_id,
     )
 

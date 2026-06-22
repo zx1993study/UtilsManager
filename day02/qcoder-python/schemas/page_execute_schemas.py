@@ -27,4 +27,5 @@ class PageInspectRequest(_CamelModel):
 class PageTemplateExecuteRequest(_CamelModel):
     page_id: int = Field(..., description="page id")
     instance_ids: List[int] = Field(default_factory=list, description="page testcase ids")
+    token_id: Optional[int] = Field(None, description="selected token id")
     request_id: Optional[str] = Field(None, description="frontend request id")

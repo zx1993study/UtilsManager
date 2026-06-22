@@ -10,6 +10,7 @@ from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_u
 from schemas.api_instance_schemas import ApiInstanceList
 from models.api_info_model import ApiInfo
 from models.project_info_model import ProjectInfo
+from models.token_info_model import TokenInfo
 
 async def get_api_instance_by_id(db: Session, instance_id: int) -> Optional[dict]:
     """根据ID获取参数实例"""
@@ -20,21 +21,25 @@ async def get_api_instance_by_id(db: Session, instance_id: int) -> Optional[dict
                 ProjectInfo.project_id,
                 ApiInfo.method_url,
                 ApiInfo.method_type,
-                ProjectInfo.project_address       
+                ProjectInfo.project_address,
+                TokenInfo.name.label("token_name")
             ).join(
                 ApiInfo,ApiInfo.api_id == ApiInstance.api_id
             ).join(
                 ProjectInfo,ProjectInfo.project_id == ApiInfo.project_id
+            ).outerjoin(
+                TokenInfo, TokenInfo.token_id == ApiInstance.token_id
             ).filter(ApiInstance.instance_id == instance_id).first()
     if item:
         return get_api_instance_detail_dict(item)
 
 def get_api_instance_detail_dict(api_instance_tuple) -> dict:
     """将查询结果元组转换为字典"""
-    ApiInstance, api_name, project_name, project_id, method_url, method_type, project_address = api_instance_tuple
+    ApiInstance, api_name, project_name, project_id, method_url, method_type, project_address, token_name = api_instance_tuple
     return {
         "instance_id": ApiInstance.instance_id,
         "api_id": ApiInstance.api_id,
+        "token_id": ApiInstance.token_id,
         "instance_name": ApiInstance.instance_name,
         "instance_json": ApiInstance.instance_json,
         "create_time": ApiInstance.create_time,
@@ -49,7 +54,8 @@ def get_api_instance_detail_dict(api_instance_tuple) -> dict:
         "project_id": project_id,
         "method_url": method_url,
         "method_type": method_type,
-        "project_address": project_address
+        "project_address": project_address,
+        "token_name": token_name
     }
 
 async def get_api_instance_by_unique_fields(
@@ -112,11 +118,14 @@ async def get_api_instance_list(
                 ProjectInfo.project_id,
                 ApiInfo.method_url,
                 ApiInfo.method_type,
-                ProjectInfo.project_address       
+                ProjectInfo.project_address,
+                TokenInfo.name.label("token_name")
             ).join(
                 ApiInfo,ApiInfo.api_id == ApiInstance.api_id
             ).join(
                 ProjectInfo,ProjectInfo.project_id == ApiInfo.project_id
+            ).outerjoin(
+                TokenInfo, TokenInfo.token_id == ApiInstance.token_id
             ).filter(*data.filter_params()).order_by(ApiInstance.instance_id.desc()).offset(offset).limit(data.page_size).all()
     result_list = []
     for item in items:
@@ -158,6 +167,8 @@ async def create_api_instance(db: Session, data: dict) -> ApiInstance:
         ApiInstance: 创建的参数实例对象
     """
     """自动设置审计字段（创建时间、更新时间）"""
+    data.setdefault("exec_count", 0)
+    data.setdefault("status", 0)
     data = set_audit_fields_for_create(data)
     db_obj = ApiInstance(**data)
     db.add(db_obj)

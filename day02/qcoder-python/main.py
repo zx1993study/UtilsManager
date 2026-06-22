@@ -16,6 +16,8 @@ from core.db import Base, engine
 from core.logger import logger
 from core.responsemsg import error_response
 from core.schema_migrations import ensure_runtime_schema
+from models.api_token_info_model import ApiTokenInfo as _ApiTokenInfo
+from models.page_token_info_model import PageTokenInfo as _PageTokenInfo
 from service.system_log_service import cleanup_old_logs, periodic_log_cleanup
 
 Base.metadata.create_all(bind=engine)

@@ -41,7 +41,51 @@ def _ensure_dict_info(dict_name: str, dict_key: str, dict_value: str, type_value
         )
 
 
+def _ensure_api_token_info_table() -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS api_token_info (
+                    id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+                    api_id BIGINT NOT NULL COMMENT 'api id',
+                    token_id BIGINT NOT NULL COMMENT 'token id',
+                    create_time DATETIME NULL COMMENT 'create time',
+                    update_time DATETIME NULL COMMENT 'update time',
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uk_api_token_info (api_id, token_id),
+                    KEY idx_api_token_info_api_id (api_id),
+                    KEY idx_api_token_info_token_id (token_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """
+            )
+        )
+
+
+def _ensure_page_token_info_table() -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS page_token_info (
+                    id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+                    page_id BIGINT NOT NULL COMMENT 'page id',
+                    token_id BIGINT NOT NULL COMMENT 'token id',
+                    create_time DATETIME NULL COMMENT 'create time',
+                    update_time DATETIME NULL COMMENT 'update time',
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uk_page_token_info (page_id, token_id),
+                    KEY idx_page_token_info_page_id (page_id),
+                    KEY idx_page_token_info_token_id (token_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """
+            )
+        )
+
+
 def ensure_runtime_schema() -> None:
+    _ensure_api_token_info_table()
+    _ensure_page_token_info_table()
     _add_missing_columns(
         "dict_info",
         {
@@ -51,4 +95,16 @@ def ensure_runtime_schema() -> None:
         },
     )
     _ensure_dict_info("Playwright配置", "playwright_retry_count", "0", 9)
+    _add_missing_columns(
+        "api_instance",
+        {
+            "token_id": "token_id BIGINT NULL COMMENT 'tokenId'",
+        },
+    )
+    _add_missing_columns(
+        "page_instance",
+        {
+            "token_id": "token_id BIGINT NULL COMMENT 'tokenId'",
+        },
+    )
     _ensure_dict_info("Playwright配置", "playwright_browser_timeout", "0", 9)

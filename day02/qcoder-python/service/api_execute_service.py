@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 from models.api_result_model import ApiResult
 from schemas.api_execute_schemas import ApiExecuteRequest, ApiExecuteResult, BatchApiExecuteResult
-from mysql.api_execute_sql import get_api_execution_context, get_instances_by_api_id, get_instances_by_project_id, update_api_instance_exec_count, get_existing_instance_ids
+from mysql.api_execute_sql import get_api_execution_context, get_instances_by_api_id, get_instances_by_project_id, update_api_instance_execute_state, get_existing_instance_ids
 from mysql.api_result_sql import batch_create_api_results
 from core.responsemsg import success_response, error_response
 from core.logger import logger
@@ -108,6 +108,7 @@ def _execute_single_task(db: Session, instance_id: int) -> dict:
     """执行单个任务并返回结果字典（用于存入数据库）"""
     context = get_api_execution_context(db, instance_id)
     if not context:
+        update_api_instance_execute_state(db, instance_id, False)
         return {
             "instance_id": instance_id,
             "result_status": 0,
@@ -119,7 +120,7 @@ def _execute_single_task(db: Session, instance_id: int) -> dict:
     exec_result = _build_and_send_request(context)
     
     """更新执行次数"""
-    update_api_instance_exec_count(db, instance_id)
+    update_api_instance_execute_state(db, instance_id, exec_result['success'])
     
     """构造符合 ApiResult 模型的字典"""
     result_db_data = {
@@ -186,6 +187,7 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
                             "response_info": "Not Found",
                             "remark": "配置缺失"
                         })
+                        update_api_instance_execute_state(db, iid, False)
                 
                 future_to_id = {executor.submit(_build_and_send_request, ctx): iid for iid, ctx in contexts}
                 for future in as_completed(future_to_id):
@@ -200,9 +202,10 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
                             "remark": f"耗时: {exec_res['execution_time']}s"
                         })
                         """更新执行次数（在主线程或单独处理，避免线程竞争）"""
-                        update_api_instance_exec_count(db, iid)
+                        update_api_instance_execute_state(db, iid, exec_res['success'])
                     except Exception as e:
                         results.append({"instance_id": iid, "response_info": str(e), "result_status": 0, "code": "500", "remark": "执行异常"})
+                        update_api_instance_execute_state(db, iid, False)
         else:
             for iid in instance_ids:
                 res = _execute_single_task(db, iid)

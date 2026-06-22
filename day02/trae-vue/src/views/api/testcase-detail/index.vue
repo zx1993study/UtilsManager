@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="api-testcase-detail">
     <!-- 顶部标题区域 -->
     <el-card shadow="never" class="header-card">
@@ -15,14 +15,36 @@
 
     <!-- 下方左右布局区域 -->
     <div class="content-layout">
-      <!-- 左侧：选项卡（参数模板 + 结果详情） -->
+      <!-- 左侧：选项卡（参数模板 + 结果详情）-->
       <el-card shadow="never" class="left-panel">
         <el-tabs v-model="activeTab" class="left-tabs">
-          <!-- 结果详情选项卡 -->
+          <!-- 结果详情选项卡-->
           <el-tab-pane label="结果详情" name="result">
             <div class="result-detail-container">
-              <!-- 上方筛选区域 -->
-              <div class="filter-section">
+              <div v-if="selectedTestcase" class="section-block">
+                <el-form label-width="70px" class="testcase-token-form">
+                  <el-form-item label="Token">
+                    <el-select
+                      v-model="selectedTestcase.tokenId"
+                      placeholder="请选择Token"
+                      style="width: 100%"
+                      clearable
+                      @change="handleSelectedTokenChange"
+                    >
+                      <el-option
+                        v-for="item in tokenOptions"
+                        :key="item.tokenId"
+                        :label="item.name"
+                        :value="item.tokenId"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-form>
+                <div class="section-title">用例JSON</div>
+                <pre class="json-content">{{ formatJson(selectedTestcase.instanceJson) }}</pre>
+              </div>
+              <!-- 上方筛选区域-->
+              <div v-if="false" class="filter-section">
                 <el-form :inline="true" class="filter-form">
                   <el-form-item label="API">
                     <el-select filterable
@@ -64,7 +86,8 @@
               </div>
 
               <!-- 下方结果展示区域 -->
-              <div v-if="currentResult" class="result-content">
+              <div v-if="currentResult" class="result-content section-block">
+                <div class="section-title">最新结果</div>
                 <el-descriptions :column="1" border>
                   <el-descriptions-item label="URL">
                     {{ currentResult.projectAddress }}{{ currentResult.apiUrl }}
@@ -87,7 +110,7 @@
             </div>
           </el-tab-pane>
 
-          <!-- 参数模板选项卡 -->
+          <!-- 参数模板选项卡-->
           <el-tab-pane label="参数模板" name="template">
             <div class="template-container">
               <div class="template-header">
@@ -140,10 +163,31 @@
               </el-table>
             </div>
           </el-tab-pane>
+          <el-tab-pane label="参数查询" name="query">
+            <div class="query-container">
+              <div class="query-input-row">
+                <el-input
+                  v-model="queryKey"
+                  placeholder="输入要查询的key，多个用、或逗号分隔，例如 token、data.id"
+                  clearable
+                  @keyup.enter="handleQueryParam"
+                />
+                <el-button type="primary" @click="handleQueryParam">
+                  <el-icon><Search /></el-icon>
+                  <span>查询</span>
+                </el-button>
+              </div>
+              <div v-if="queryResult" class="query-result">
+                <div class="response-label">查询结果:</div>
+                <pre class="json-content">{{ queryResult }}</pre>
+              </div>
+              <el-empty v-else description="运行或选择用例后，输入 key 查询响应参数" />
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </el-card>
 
-      <!-- 右侧：测试用例列表 -->
+      <!-- 右侧：测试用例列表-->
       <el-card shadow="never" class="testcase-card">
         <div class="card-header">
           <h3>测试用例列表</h3>
@@ -186,6 +230,8 @@
           @edit="handleEditTestcase"
           @delete="handleDeleteTestcase"
           @selection-change="handleSelectionChange"
+          @row-click="handleViewTestcase"
+          @data-loaded="handleTestcaseDataLoaded"
         >
           <template #status="{ row }">
             <el-tag :type="getStatusType(row.status)">
@@ -199,29 +245,31 @@
               type="success"
               size="small"
               link
+              :disabled="runningInstanceIds.includes(row.instanceId)"
+              :loading="runningInstanceIds.includes(row.instanceId)"
               @click="handleRunTestcase(row)"
             >
               <el-icon><VideoPlay /></el-icon>
               <span>运行</span>
             </el-button>
-            <el-button
-              type="primary"
-              size="small"
-              link
-              @click="handleCopyTestcase(row)"
-            >
-              <el-icon><DocumentCopy /></el-icon>
-              <span>复制</span>
-            </el-button>
-            <el-button
-              type="danger"
-              size="small"
-              link
-              @click="handleDeleteTestcase(row)"
-            >
-              <el-icon><Delete /></el-icon>
-              <span>删除</span>
-            </el-button>
+            <el-dropdown trigger="click" @command="command => handleTestcaseMoreCommand(command, row)">
+              <el-button type="primary" size="small" link>
+                <span>更多</span>
+                <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="copy">
+                    <el-icon><DocumentCopy /></el-icon>
+                    <span>复制</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete">
+                    <el-icon><Delete /></el-icon>
+                    <span>删除</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </common-table>
       </el-card>
@@ -241,6 +289,17 @@
         <el-input v-model="formData.instanceName" placeholder="请输入用例名称" />
       </el-form-item>
 
+
+      <el-form-item label="Token" prop="tokenId">
+        <el-select v-model="formData.tokenId" placeholder="请选择Token" style="width: 100%" clearable>
+          <el-option
+            v-for="item in tokenOptions"
+            :key="item.tokenId"
+            :label="item.name"
+            :value="item.tokenId"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="描述" prop="description">
         <el-input v-model="formData.description" type="textarea" placeholder="请输入描述" />
       </el-form-item>
@@ -254,7 +313,7 @@
       </el-form-item>
 
       <el-form-item label="用例输入" prop="instanceJson">
-        <el-input 
+        <el-input
           v-model="formData.instanceJson" 
           type="textarea" 
           :rows="5"
@@ -277,6 +336,17 @@
         <el-input v-model="copyFormData.instanceName" placeholder="请输入用例名称" />
       </el-form-item>
 
+
+      <el-form-item label="Token" prop="tokenId">
+        <el-select v-model="copyFormData.tokenId" placeholder="请选择Token" style="width: 100%" clearable>
+          <el-option
+            v-for="item in tokenOptions"
+            :key="item.tokenId"
+            :label="item.name"
+            :value="item.tokenId"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="描述" prop="description">
         <el-input v-model="copyFormData.description" type="textarea" placeholder="请输入描述" />
       </el-form-item>
@@ -339,8 +409,7 @@
           v-model="templateFormData.remark"
           type="textarea"
           :rows="3"
-          placeholder="请输入备注"
-        />
+          placeholder="请输入内容" />
       </el-form-item>
     </common-dialog>
   </div>
@@ -352,7 +421,7 @@ import { useRoute, useRouter } from 'vue-router'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Plus, Delete, Search, DocumentCopy } from '@element-plus/icons-vue'
+import { ArrowDown, VideoPlay, Plus, Delete, Search, DocumentCopy } from '@element-plus/icons-vue'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as apiApi from '@/api/api/api'
 import * as apiTemplateApi from '@/api/api/api-template'
@@ -364,6 +433,11 @@ const router = useRouter()
 const tableRef = ref(null)
 const submitLoading = ref(false)
 const selectedRows = ref([])
+const selectedTestcase = ref(null)
+const queryKey = ref('')
+const queryResult = ref('')
+const tokenOptions = ref([])
+const runningInstanceIds = ref([])
 
 // 选项卡激活状态
 const activeTab = ref('result')
@@ -374,7 +448,7 @@ const apiList = ref([])
 // 实例列表
 const instanceList = ref([])
 
-// 选中的API ID
+// 閫変腑鐨凙PI ID
 const selectedApiId = ref(null)
 
 // 选中的实例ID
@@ -416,6 +490,9 @@ const apiInfo = reactive({
   projectName: '',
   projectAddress: '',
   tokenName: '',
+  tokenId: null,
+  tokenIds: [],
+  tokenNames: [],
   remark: ''
 })
 
@@ -449,12 +526,12 @@ const pagination = reactive({
   total: 0
 })
 
-// 弹窗控制
+// 寮圭獥鎺у埗
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
 
-// 表单数据
+// 琛ㄥ崟鏁版嵁
 const formData = reactive({
   instanceId: null,
   projectId: '',
@@ -463,20 +540,21 @@ const formData = reactive({
   description: '',
   expectResult: '',
   remark: '',
+  tokenId: null,
   instanceJson: ''
 })
 
-// 表单验证规则
+// 琛ㄥ崟楠岃瘉瑙勫垯
 const formRules = {
   instanceName: [{ required: true, message: '请输入用例名称', trigger: 'blur' }],
   instanceJson: [{ required: true, message: '请输入用例参数', trigger: 'blur' }]
 }
 
-// 复制弹窗控制
+// 复制寮圭獥鎺у埗
 const copyDialogVisible = ref(false)
 const copySubmitLoading = ref(false)
 
-// 复制表单数据
+// 复制琛ㄥ崟鏁版嵁
 const copyFormData = reactive({
   instanceId: null,
   projectId: '',
@@ -485,6 +563,7 @@ const copyFormData = reactive({
   description: '',
   expectResult: '',
   remark: '',
+  tokenId: null,
   instanceJson: ''
 })
 
@@ -510,6 +589,29 @@ const getMethodTypeColor = (type) => {
     5: 'info'
   }
   return colors[type] || 'info'
+}
+
+const buildTokenOptionsFromApi = () => {
+  const ids = Array.isArray(apiInfo.tokenIds) ? apiInfo.tokenIds : (apiInfo.tokenId ? [apiInfo.tokenId] : [])
+  const names = Array.isArray(apiInfo.tokenNames) ? apiInfo.tokenNames : []
+  tokenOptions.value = ids.map((tokenId, index) => ({
+    tokenId,
+    name: names[index] || (index === 0 ? apiInfo.tokenName : `Token ${tokenId}`)
+  }))
+}
+
+const getDefaultTokenId = () => {
+  return tokenOptions.value[0]?.tokenId || null
+}
+
+const normalizeTestcaseTokenId = (row = {}) => {
+  return row.tokenId || getDefaultTokenId()
+}
+
+const handleSelectedTokenChange = (tokenId) => {
+  if (selectedTestcase.value) {
+    selectedTestcase.value.tokenId = tokenId || null
+  }
 }
 
 // 获取参数类型文本
@@ -555,29 +657,139 @@ const getFieldTypeText = (type) => {
   return typeMap[type] || type
 }
 
-// 获取带API ID的测试用例列表
+// 获取带 API ID 的测试用例列表
 const getTestcaseListWithApiId = async (params) => {
-  // 确保 apiId 参数正确传递
   const requestParams = {
     ...params,
     apiId: apiInfo.apiId
   }
-  console.log('请求参数:', requestParams) // 调试用，可以后续删除
   return await apiTestcaseApi.getTestcaseList(requestParams)
 }
 
 // 处理选择变化
 const handleSelectionChange = (selection) => {
   selectedRows.value = selection
-  console.log('选中行数据:', selection)
-  console.log('选中的IDs:', selection.map(item => item.instanceId))
+  console.log('閫変腑琛屾暟鎹?', selection)
+  console.log('閫変腑鐨処Ds:', selection.map(item => item.instanceId))
 }
 
 // 加载API详情
+const handleTestcaseDataLoaded = async ({ list }) => {
+  if (!selectedTestcase.value && list?.length) {
+    await handleViewTestcase(list[0])
+  }
+}
+
+const refreshSelectedTestcase = async (instanceId = selectedTestcase.value?.instanceId) => {
+  if (!instanceId) return
+  try {
+    const res = await apiTestcaseApi.getTestcaseDetail(instanceId)
+    if (res.success && res.data) {
+      selectedTestcase.value = res.data
+    }
+  } catch (error) {
+    console.error('刷新当前用例失败:', error)
+  }
+}
+
+const handleViewTestcase = async (row) => {
+  selectedTestcase.value = {
+    ...row,
+    tokenId: normalizeTestcaseTokenId(row)
+  }
+  selectedInstanceId.value = row.instanceId
+  currentResult.value = null
+  queryResult.value = ''
+  await loadLatestResultByInstanceId(row.instanceId)
+}
+
+const findAllValuesByKey = (obj, key) => {
+  const results = []
+  if (!key) return results
+  if (key.includes('.')) {
+    let current = obj
+    let matched = true
+    key.split('.').forEach(part => {
+      if (!matched) return
+      if (current && typeof current === 'object' && Object.prototype.hasOwnProperty.call(current, part)) {
+        current = current[part]
+      } else {
+        matched = false
+      }
+    })
+    if (matched && current !== undefined) results.push(current)
+    return results
+  }
+  const search = (node) => {
+    if (Array.isArray(node)) {
+      node.forEach(search)
+      return
+    }
+    if (!node || typeof node !== 'object') return
+    Object.keys(node).forEach(itemKey => {
+      if (itemKey === key) results.push(node[itemKey])
+      search(node[itemKey])
+    })
+  }
+  search(obj)
+  return results
+}
+
+const stringifyQueryValue = (value) => {
+  if (value === null) return 'null'
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch (error) {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+const handleQueryParam = () => {
+  const input = (queryKey.value || '').trim()
+  if (!input) {
+    ElMessage.warning('请输入要查询的 key')
+    return
+  }
+  const responseInfo = currentResult.value?.responseInfo
+  if (!responseInfo) {
+    ElMessage.warning('请先选择并执行用例，或选择已有结果的用例')
+    return
+  }
+  let data
+  try {
+    data = typeof responseInfo === 'string' ? JSON.parse(responseInfo) : responseInfo
+  } catch (error) {
+    ElMessage.error('响应数据不是有效 JSON，无法查询')
+    return
+  }
+  const keys = input.split(/[、,，]/).map(item => item.trim()).filter(Boolean)
+  const lines = []
+  let found = false
+  keys.forEach(key => {
+    const values = findAllValuesByKey(data, key)
+    if (!values.length) {
+      lines.push(`${key}:未找到`)
+      return
+    }
+    found = true
+    values.forEach(value => {
+      lines.push(`${key}:${stringifyQueryValue(value)}`)
+    })
+  })
+  queryResult.value = lines.join('\n')
+  if (!found) {
+    ElMessage.warning('未在响应中找到对应的值')
+  }
+}
+
 const loadApiDetail = async () => {
   try {
     const res = await apiApi.getApiDetail(apiInfo.apiId)
     Object.assign(apiInfo, res.data)
+    buildTokenOptionsFromApi()
     
     // 设置默认选中的API为当前API
     selectedApiId.value = apiInfo.apiId
@@ -632,9 +844,12 @@ const loadStatistics = async () => {
 
 // 编辑用例
 const handleEditTestcase = (row) => {
+  selectedTestcase.value = row
+  selectedInstanceId.value = row.instanceId
   isEdit.value = true
   dialogTitle.value = '编辑用例'
   Object.assign(formData, row)
+  formData.tokenId = normalizeTestcaseTokenId(row)
   dialogVisible.value = true
 }
 
@@ -654,6 +869,7 @@ const handleAddTestcase = () => {
     description: '',
     expectResult: '',
     remark: '',
+    tokenId: getDefaultTokenId(),
     instanceJson: defaultJson
   })
   dialogVisible.value = true
@@ -678,80 +894,84 @@ const generateDefaultJsonFromTemplate = () => {
 // 根据字段类型获取默认值
 const getFieldTypeDefaultValue = (fieldType) => {
   const typeMap = {
-    1: '',           // String
-    2: 0,            // Integer
-    3: false,        // Boolean
-    4: [],           // Array
-    5: {}            // Object
+    1: '',
+    2: 0,
+    3: false,
+    4: [],
+    5: {}
   }
   return typeMap[fieldType] !== undefined ? typeMap[fieldType] : ''
 }
 
 // 运行单个测试用例
-const handleRunTestcase = (row) => {
-  ElMessageBox.confirm(`确认运行用例"${row.instanceName}"吗？`, '提示', {
+const handleRunTestcase = async (row) => {
+  if (runningInstanceIds.value.includes(row.instanceId)) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`确认运行用例"${row.instanceName}"吗？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
-    type: 'info'
-  }).then(async () => {
-    try {
-      const res = await apiTestcaseApi.executeTestcase(row.instanceId)
-      if (handleApiResponse(res, '运行成功', '运行失败')) {
-        tableRef.value.refresh()
-        loadStatistics()
-
-        // 如果当前选中的实例ID与运行的实例ID相同，刷新结果详情
-        if (selectedInstanceId.value === row.instanceId) {
-          await loadLatestResultByInstanceId(row.instanceId)
-        }
-
-        // 如果在结果详情选项卡，且当前API与运行的用例所属API相同，刷新最新结果
-        if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
-          await loadLatestResultByApiId(selectedApiId.value)
+      type: 'info'
+    })
+    runningInstanceIds.value.push(row.instanceId)
+    const res = await apiTestcaseApi.executeTestcase(row.instanceId)
+    if (handleApiResponse(res, '运行成功', '运行失败')) {
+      const refreshed = await tableRef.value.refresh()
+      await loadStatistics()
+      selectedInstanceId.value = row.instanceId
+      await refreshSelectedTestcase(row.instanceId)
+      const latestRow = refreshed?.list?.find(item => item.instanceId === row.instanceId)
+      if (latestRow) {
+        selectedTestcase.value = {
+          ...latestRow,
+          tokenId: normalizeTestcaseTokenId(latestRow)
         }
       }
-    } catch (error) {
+      await loadLatestResultByInstanceId(row.instanceId)
+      queryResult.value = ''
+      if (activeTab.value === 'result' && selectedApiId.value === row.apiId) {
+        await loadLatestResultByApiId(selectedApiId.value)
+      }
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
       console.error('运行失败:', error)
       ElMessage.error('运行失败')
     }
-  }).catch(() => {})
+  } finally {
+    runningInstanceIds.value = runningInstanceIds.value.filter(id => id !== row.instanceId)
+  }
 }
 
 // 批量运行测试用例
-const handleBatchRun = () => {
+const handleBatchRun = async () => {
   if (!selectedRows.value || selectedRows.value.length === 0) {
     ElMessage.warning('请选择要运行的用例')
     return
   }
-
-  console.log('批量运行 - 选中行数:', selectedRows.value.length)
-  console.log('批量运行 - IDs:', selectedRows.value.map(item => item.instanceId))
-
-  ElMessageBox.confirm(`确认运行选中的 ${selectedRows.value.length} 条用例吗？`, '提示', {
+  try {
+    await ElMessageBox.confirm(`确认运行选中的 ${selectedRows.value.length} 条用例吗？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
-    type: 'info'
-  }).then(async () => {
-    try {
-      const ids = selectedRows.value.map(item => item.instanceId)
-      console.log('发送批量运行请求，IDs:', ids)
-      const res = await apiTestcaseApi.batchExecuteTestcase(ids)
-      if (handleApiResponse(res, '批量运行成功', '批量运行失败')) {
-        tableRef.value.refresh()
-        loadStatistics()
-        // 清空选择
-        tableRef.value.clearSelection()
-
-        // 刷新当前API的最新结果
-        if (selectedApiId.value) {
-          await loadLatestResultByApiId(selectedApiId.value)
-        }
+      type: 'info'
+    })
+    const ids = selectedRows.value.map(item => item.instanceId)
+    const res = await apiTestcaseApi.batchExecuteTestcase(ids)
+    if (handleApiResponse(res, '批量运行成功', '批量运行失败')) {
+      await tableRef.value.refresh()
+      await loadStatistics()
+      tableRef.value.clearSelection()
+      if (selectedApiId.value) {
+        await loadLatestResultByApiId(selectedApiId.value)
       }
-    } catch (error) {
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
       console.error('批量运行失败:', error)
       ElMessage.error('批量运行失败')
     }
-  }).catch(() => {})
+  }
 }
 
 // 复制测试用例
@@ -765,9 +985,18 @@ const handleCopyTestcase = (row) => {
     description: row.description || '',
     expectResult: row.expectResult || '',
     remark: row.remark || '',
+    tokenId: normalizeTestcaseTokenId(row),
     instanceJson: row.instanceJson || ''
   })
   copyDialogVisible.value = true
+}
+
+const handleTestcaseMoreCommand = (command, row) => {
+  const actions = {
+    copy: handleCopyTestcase,
+    delete: handleDeleteTestcase
+  }
+  actions[command]?.(row)
 }
 
 // 提交复制表单
@@ -810,6 +1039,12 @@ const handleSubmit = async () => {
       dialogVisible.value = false
       tableRef.value.refresh()
       loadStatistics()
+      if (formData.instanceId) {
+        selectedInstanceId.value = formData.instanceId
+        await refreshSelectedTestcase(formData.instanceId)
+        await loadLatestResultByInstanceId(formData.instanceId)
+        queryResult.value = ''
+      }
 
       // 延迟刷新左侧API实例列表，避免与表格刷新冲突
       await nextTick()
@@ -830,22 +1065,15 @@ const handleSubmit = async () => {
 // 删除测试用例
 const handleDeleteTestcase = async (row) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除测试用例 "${row.instanceName}" 吗？`,
-      '删除确认',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
+    await ElMessageBox.confirm('确定要删除测试用例 "' + row.instanceName + '" 吗？', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
     const res = await apiTestcaseApi.deleteTestcase(row.instanceId)
     if (handleApiResponse(res, '删除成功', '删除失败')) {
       tableRef.value.refresh()
       loadStatistics()
-
-      // 延迟刷新左侧API实例列表，避免与表格刷新冲突
       await nextTick()
       setTimeout(async () => {
         if (selectedApiId.value) {
@@ -867,31 +1095,18 @@ const handleBatchDeleteTestcase = async () => {
     ElMessage.warning('请先选择要删除的测试用例')
     return
   }
-  
-  console.log('批量删除 - 选中行数:', selectedRows.value.length)
-  console.log('批量删除 - IDs:', selectedRows.value.map(item => item.instanceId))
-  
   try {
-    await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedRows.value.length} 个测试用例吗？`,
-      '批量删除确认',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
+    await ElMessageBox.confirm('确定要删除选中的 ' + selectedRows.value.length + ' 个测试用例吗？', '批量删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
     const ids = selectedRows.value.map(item => item.instanceId)
-    console.log('发送批量删除请求，IDs:', ids)
     const res = await apiTestcaseApi.batchDeleteTestcase(ids)
     if (handleApiResponse(res, '批量删除成功', '批量删除失败')) {
       tableRef.value.refresh()
       loadStatistics()
-      // 清空选择
       tableRef.value.clearSelection()
-
-      // 延迟刷新左侧API实例列表，避免与表格刷新冲突
       await nextTick()
       setTimeout(async () => {
         if (selectedApiId.value) {
@@ -907,9 +1122,7 @@ const handleBatchDeleteTestcase = async () => {
   }
 }
 
-// ==================== 参数模板相关方法 ====================
-
-// 加载参数模板列表
+// 鍔犺浇参数模板列表
 const loadTemplateList = async () => {
   try {
     const res = await apiTemplateApi.getTemplateList({ 
@@ -947,7 +1160,7 @@ const handleEditTemplate = (row) => {
 
 // 删除参数模板
 const handleDeleteTemplate = (row) => {
-  ElMessageBox.confirm(`确定要删除字段"${row.fieldName}"吗？`, '提示', {
+  ElMessageBox.confirm('确定要删除字段 ' + row.fieldName + ' 吗？', '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
@@ -964,7 +1177,7 @@ const handleDeleteTemplate = (row) => {
   }).catch(() => {})
 }
 
-// 提交参数模板
+// 鎻愪氦参数模板
 const handleTemplateSubmit = async () => {
   try {
     templateSubmitLoading.value = true
@@ -986,12 +1199,9 @@ const handleTemplateSubmit = async () => {
   }
 }
 
-// 页面加载时初始化
+// 页面加载初始化
 onMounted(() => {
-  // 从路由参数获取API ID
   apiInfo.apiId = route.params.apiId
-  
-  // 从 query参数获取基本信息
   if (route.query.apiName) {
     apiInfo.apiName = route.query.apiName
   }
@@ -1001,12 +1211,9 @@ onMounted(() => {
   if (route.query.methodUrl) {
     apiInfo.methodUrl = route.query.methodUrl
   }
-  
-  // 加载API详情和测试用例列表
   if (apiInfo.apiId) {
     loadApiDetail()
-    loadTemplateList() // 加载参数模板列表
-    // 手动刷新测试用例列表，确保apiId已经设置
+    loadTemplateList()
     setTimeout(() => {
       if (tableRef.value) {
         tableRef.value.refresh()
@@ -1022,8 +1229,8 @@ onMounted(() => {
 // 加载API列表
 const loadApiList = async () => {
   try {
-    const res = await apiApi.getApiList({ pageNum: 1, pageSize: 100 })
-    apiList.value = res.data.items || []
+    const res = await apiApi.getApiOptions()
+    apiList.value = res.data?.items || res.data?.list || res.data || []
   } catch (error) {
     console.error('加载API列表失败:', error)
   }
@@ -1033,58 +1240,45 @@ const loadApiList = async () => {
 const loadInstanceList = async (apiId, keepSelectedId = false) => {
   try {
     const res = await apiTestcaseApi.getTestcaseList({ apiId, pageNum: 1, pageSize: 100 })
-    instanceList.value = res.data.items || []
-    
-    // 如果不是保持选中ID，且有实例，选择第一个作为默认值
+    instanceList.value = res.data?.items || res.data?.list || res.data || []
     if (!keepSelectedId && instanceList.value.length > 0) {
       selectedInstanceId.value = instanceList.value[0].instanceId
+      selectedTestcase.value = {
+        ...instanceList.value[0],
+        tokenId: normalizeTestcaseTokenId(instanceList.value[0])
+      }
+      await loadLatestResultByInstanceId(selectedInstanceId.value)
     }
   } catch (error) {
     console.error('加载实例列表失败:', error)
   }
 }
 
-// 根据API ID加载最新结果
+// 根据 API ID 加载最新结果
 const loadLatestResultByApiId = async (apiId) => {
   try {
     const res = await apiResultApi.getLatestResultByApiId(apiId)
-    console.log('获取API最新结果响应:', res)
-    if (res.success && res.data) {
-      currentResult.value = res.data
-      console.log('设置currentResult:', currentResult.value)
-      // 同步更新选中的实例ID
-      selectedInstanceId.value = res.data.instanceId
-    } else {
-      console.warn('未获取到结果数据, success:', res.success, 'data:', res.data)
-      currentResult.value = null
-    }
+    currentResult.value = res.success && res.data ? res.data : null
   } catch (error) {
     console.error('加载最新结果失败:', error)
     currentResult.value = null
   }
 }
 
-// 根据实例ID加载最新结果
+// 根据实例 ID 加载最新结果
 const loadLatestResultByInstanceId = async (instanceId) => {
   try {
     const res = await apiResultApi.getLatestResultByInstanceId(instanceId)
-    console.log('获取实例最新结果响应:', res)
-    if (res.success && res.data) {
-      currentResult.value = res.data
-      console.log('设置currentResult:', currentResult.value)
-    } else {
-      console.warn('未获取到结果数据, success:', res.success, 'data:', res.data)
-      currentResult.value = null
-    }
+    currentResult.value = res.success && res.data ? res.data : null
   } catch (error) {
     console.error('加载实例最新结果失败:', error)
     currentResult.value = null
   }
 }
 
-// API改变事件
+// API鏀瑰彉浜嬩欢
 const handleApiChange = async (apiId) => {
-  // 清空当前结果
+  // 娓呯┖当前结果
   currentResult.value = null
   selectedInstanceId.value = null
   
@@ -1119,7 +1313,7 @@ const formatJson = (jsonStr) => {
   }
 }
 
-// 获取Code类型
+// 鑾峰彇Code绫诲瀷
 const getCodeType = (code) => {
   if (!code) return 'info'
   const codeNum = parseInt(code)
@@ -1236,6 +1430,40 @@ const getCodeType = (code) => {
   margin-bottom: 0;
 }
 
+.section-block + .section-block {
+  margin-top: 16px;
+}
+
+.section-title {
+  margin-bottom: 8px;
+  color: #303133;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.query-container {
+  height: 100%;
+  padding: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.query-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.query-result {
+  margin-top: 12px;
+}
+
+.response-label {
+  margin-bottom: 5px;
+  color: #909399;
+  font-size: 12px;
+}
+
 .json-content {
   margin: 0;
   padding: 8px;
@@ -1298,3 +1526,5 @@ const getCodeType = (code) => {
   gap: 10px;
 }
 </style>
+
+

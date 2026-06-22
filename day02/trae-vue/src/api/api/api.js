@@ -13,6 +13,14 @@ export function getApiList(params) {
   })
 }
 
+export function getApiOptions(params) {
+  return request({
+    url: '/api/v1/apiInfo/options',
+    method: 'get',
+    params
+  })
+}
+
 // 获取接口详情
 export function getApiDetail(id) {
   return request({

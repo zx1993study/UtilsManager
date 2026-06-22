@@ -341,7 +341,7 @@ const loadApiOptions = async (projectId) => {
     return
   }
   try {
-    const res = await apiApi.getApiList({ projectId, pageNum: 1, pageSize: 100 })
+    const res = await apiApi.getApiOptions({ projectId })
     apiOptions.value = getListItems(res)
   } catch (error) {
     console.error('加载API列表失败:', error)

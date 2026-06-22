@@ -11,8 +11,8 @@
         :default-active="activeMenu"
         :collapse="isCollapse"
         :unique-opened="true"
-        router
         class="sidebar-menu"
+        @select="handleMenuSelect"
       >
         <template v-for="route in menuRoutes" :key="route.path">
           <!-- 无子菜单或只有一个子菜单项（显示为一级菜单） -->
@@ -57,7 +57,7 @@
     <!-- 右侧内容区 -->
     <el-container class="main-container">
       <!-- 顶部头部 -->
-      <el-header class="header">
+      <el-header class="header" height="44px">
         <div class="header-left">
           <el-icon 
             class="collapse-icon" 
@@ -86,7 +86,35 @@
       </el-header>
 
       <!-- 主要内容区 -->
+      <div class="page-window-bar">
+        <el-tabs
+          v-model="activeWindowKey"
+          type="card"
+          closable
+          class="page-window-tabs"
+          @tab-click="handleWindowClick"
+          @tab-remove="handleWindowRemove"
+        >
+          <el-tab-pane
+            v-for="item in pageWindows"
+            :key="item.key"
+            :label="item.title"
+            :name="item.key"
+          />
+        </el-tabs>
+      </div>
+
       <el-main class="main-content">
+        <div class="content-path-row">
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item
+              v-for="item in breadcrumbs"
+              :key="item.path || item.name"
+            >
+              {{ item.meta?.title || item.name }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
         <router-view v-slot="{ Component, route }">
           <transition name="fade-transform" mode="out-in" appear>
             <component :is="Component" :key="route.path" />
@@ -98,7 +126,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
@@ -114,6 +142,8 @@ const isCollapse = computed(() => appStore.isCollapse)
 const activeMenu = computed(() => route.path)
 const sidebarWidth = computed(() => isCollapse.value ? '64px' : '200px')
 const userInfo = computed(() => userStore.userInfo)
+const pageWindows = ref([])
+const activeWindowKey = ref('')
 
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
@@ -126,6 +156,98 @@ const menuRoutes = computed(() => {
 })
 
 // 切换侧边栏
+const breadcrumbs = computed(() => {
+  const matched = route.matched.filter(item => item.meta?.title)
+  const current = matched[matched.length - 1]
+  const parentPath = current?.meta?.breadcrumbParent
+  if (!parentPath) {
+    return matched
+  }
+
+  const parentRoute = router.resolve(parentPath).matched.find(item => item.path === parentPath)
+  if (!parentRoute || matched.some(item => item.path === parentRoute.path)) {
+    return matched
+  }
+
+  return [
+    ...matched.slice(0, -1),
+    parentRoute,
+    current
+  ]
+})
+
+const handleMenuSelect = (index) => {
+  if (index && index !== route.path) {
+    router.push(index)
+  }
+}
+
+const getWindowKey = (targetRoute) => {
+  return String(targetRoute.name || targetRoute.path)
+}
+
+const getWindowTitle = (targetRoute) => {
+  return targetRoute.meta?.title || targetRoute.name || targetRoute.path
+}
+
+const addPageWindow = (targetRoute) => {
+  if (targetRoute.path === '/login') {
+    return
+  }
+
+  const key = getWindowKey(targetRoute)
+  const existing = pageWindows.value.find(item => item.key === key)
+  if (existing) {
+    existing.fullPath = targetRoute.fullPath
+    existing.path = targetRoute.path
+    existing.title = getWindowTitle(targetRoute)
+    activeWindowKey.value = key
+    return
+  }
+
+  pageWindows.value.push({
+    key,
+    title: getWindowTitle(targetRoute),
+    path: targetRoute.path,
+    fullPath: targetRoute.fullPath
+  })
+  activeWindowKey.value = key
+}
+
+watch(
+  () => route.fullPath,
+  () => addPageWindow(route),
+  { immediate: true }
+)
+
+const handleWindowClick = (pane) => {
+  const key = pane.props.name
+  const target = pageWindows.value.find(item => item.key === key)
+  if (target && target.fullPath !== route.fullPath) {
+    router.push(target.fullPath)
+  }
+}
+
+const handleWindowRemove = (key) => {
+  const index = pageWindows.value.findIndex(item => item.key === key)
+  if (index === -1) {
+    return
+  }
+
+  const isActive = activeWindowKey.value === key
+  pageWindows.value.splice(index, 1)
+
+  if (!pageWindows.value.length) {
+    router.push('/dashboard')
+    return
+  }
+
+  if (isActive) {
+    const nextWindow = pageWindows.value[index] || pageWindows.value[index - 1]
+    router.push(nextWindow.fullPath)
+  }
+}
+
 const toggleSidebar = () => {
   appStore.toggleSidebar()
 }
@@ -261,7 +383,7 @@ const handleLogout = () => {
   height: 48px;
   display: flex;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 14px;
   cursor: pointer;
   color: #bfcbd9;
   font-size: 12px;
@@ -316,19 +438,65 @@ const handleLogout = () => {
 .user-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
 }
 
 .username {
-  font-size: 14px;
+  font-size: 12px;
+}
+
+.page-window-bar {
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+  padding: 1px 12px 0;
+}
+
+.page-window-tabs {
+  margin-top: 0;
+}
+
+.page-window-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  border-bottom: none;
+}
+
+.page-window-tabs :deep(.el-tabs__nav) {
+  border-radius: 4px 4px 0 0;
+}
+
+.page-window-tabs :deep(.el-tabs__item) {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 28px;
+}
+
+.page-window-tabs :deep(.el-tabs__content) {
+  display: none;
 }
 
 /* 主内容区 */
 .main-content {
   background: #f0f2f5;
-  padding: 20px;
+  padding: 12px;
   overflow: auto;
+}
+
+.content-path-row {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  margin-bottom: 0;
+  padding: 0 0 4px;
+  font-size: 11px;
+}
+
+.content-path-row :deep(.el-breadcrumb__inner),
+.content-path-row :deep(.el-breadcrumb__separator) {
+  color: #606266;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 /* 过渡动画 */

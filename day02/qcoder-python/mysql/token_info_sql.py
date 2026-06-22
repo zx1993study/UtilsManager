@@ -122,6 +122,34 @@ async def get_token_info_list(
     return result_list, total
 
 
+async def get_token_info_options(
+    db: Session,
+    project_id: Optional[int],
+    token_type: int,
+    name: Optional[str] = None
+) -> List[dict]:
+    """获取Token下拉框列表，来源token_type必填。"""
+    query = db.query(TokenInfo).filter(TokenInfo.token_type == token_type)
+    if project_id is not None:
+        query = query.filter(TokenInfo.project_id == project_id)
+    if name:
+        query = query.filter(TokenInfo.name.contains(name))
+
+    rows = query.order_by(TokenInfo.token_id.desc()).all()
+    return [
+        {
+            "token_id": row.token_id,
+            "name": row.name,
+            "type": row.type,
+            "token_type": row.token_type,
+            "project_id": row.project_id,
+            "instance_id": row.instance_id,
+            "token": row.token,
+        }
+        for row in rows
+    ]
+
+
 async def create_token_info(db: Session, data: dict) -> TokenInfo:
     """创建Token信息"""
     db_obj = TokenInfo(**data)

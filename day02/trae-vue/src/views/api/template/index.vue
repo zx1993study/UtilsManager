@@ -383,7 +383,7 @@ const loadProjectList = async () => {
 // 加载API列表
 const loadApiList = async (projectId) => {
   try {
-    const res = await apiListApi.getApiList({ projectId, pageSize: 1000 })
+    const res = await apiListApi.getApiOptions({ projectId })
     
     // 尝试多种可能的数据结构
     let apis = []
@@ -426,7 +426,7 @@ const handleSearchProjectChange = async (projectId) => {
 // 加载搜索区域的API列表
 const loadSearchApiList = async (projectId) => {
   try {
-    const res = await apiListApi.getApiList({ projectId, pageSize: 1000 })
+    const res = await apiListApi.getApiOptions({ projectId })
     
     let apis = []
     if (res.data?.items) {

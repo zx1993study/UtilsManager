@@ -167,40 +167,64 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-button
-              v-if="showEdit"
-              type="primary"
-              size="small"
-              link
-              @click="$emit('edit', row)"
-            >
-              <el-icon><Edit /></el-icon>
-              <span>编辑</span>
-            </el-button>
-
-            <el-button
-              v-if="showCopy"
-              type="success"
-              size="small"
-              link
-              @click="$emit('copy', row)"
-            >
-              <el-icon><CopyDocument /></el-icon>
-              <span>复制</span>
-            </el-button>
-
-            <el-button
-              v-if="showDelete"
-              type="danger"
-              size="small"
-              link
-              @click="$emit('delete', row)"
-            >
-              <el-icon><Delete /></el-icon>
-              <span>删除</span>
-            </el-button>
-
             <slot name="operation" :row="row"></slot>
+            <template v-if="!shouldCollapseDefaultOperations">
+              <el-button
+                v-if="rowShowEdit"
+                type="primary"
+                size="small"
+                link
+                @click="$emit('edit', row)"
+              >
+                <el-icon><Edit /></el-icon>
+                <span>编辑</span>
+              </el-button>
+
+              <el-button
+                v-if="rowShowCopy"
+                type="success"
+                size="small"
+                link
+                @click="$emit('copy', row)"
+              >
+                <el-icon><CopyDocument /></el-icon>
+                <span>复制</span>
+              </el-button>
+
+              <el-button
+                v-if="rowShowDelete"
+                type="danger"
+                size="small"
+                link
+                @click="$emit('delete', row)"
+              >
+                <el-icon><Delete /></el-icon>
+                <span>删除</span>
+              </el-button>
+            </template>
+
+            <el-dropdown v-else trigger="click" @command="command => handleDefaultOperation(command, row)">
+              <el-button type="primary" size="small" link>
+                <span>更多</span>
+                <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="rowShowEdit" command="edit">
+                    <el-icon><Edit /></el-icon>
+                    <span>编辑</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="rowShowCopy" command="copy">
+                    <el-icon><CopyDocument /></el-icon>
+                    <span>复制</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="rowShowDelete" command="delete">
+                    <el-icon><Delete /></el-icon>
+                    <span>删除</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -221,8 +245,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
-import { Search, Refresh, Plus, Delete, Edit, CopyDocument } from '@element-plus/icons-vue'
+import { computed, ref, reactive, watch, onMounted, useSlots } from 'vue'
+import { ArrowDown, Search, Refresh, Plus, Delete, Edit, CopyDocument } from '@element-plus/icons-vue'
 
 const props = defineProps({
   data: {
@@ -263,7 +287,7 @@ const props = defineProps({
   },
   showIndex: {
     type: Boolean,
-    default: true
+    default: false
   },
   showAdd: {
     type: Boolean,
@@ -278,6 +302,18 @@ const props = defineProps({
     default: false
   },
   showDelete: {
+    type: Boolean,
+    default: true
+  },
+  showRowEdit: {
+    type: Boolean,
+    default: true
+  },
+  showRowCopy: {
+    type: Boolean,
+    default: true
+  },
+  showRowDelete: {
     type: Boolean,
     default: true
   },
@@ -327,12 +363,25 @@ const emit = defineEmits([
   'data-loaded'
 ])
 
+const slots = useSlots()
 const tableRef = ref(null)
 const searchForm = reactive({})
 const selectedRows = ref([])
 const internalLoading = ref(false)
 const tableData = ref([])
 const cellRefs = new Map()
+const rowShowEdit = computed(() => props.showEdit && props.showRowEdit)
+const rowShowCopy = computed(() => props.showCopy && props.showRowCopy)
+const rowShowDelete = computed(() => props.showDelete && props.showRowDelete)
+const defaultOperationCount = computed(() => [
+  rowShowEdit.value,
+  rowShowCopy.value,
+  rowShowDelete.value
+].filter(Boolean).length)
+const hasOperationSlot = computed(() => Boolean(slots.operation))
+const shouldCollapseDefaultOperations = computed(() => {
+  return defaultOperationCount.value > 2 || (hasOperationSlot.value && defaultOperationCount.value >= 2)
+})
 
 const setCellRef = (el, prop, row) => {
   if (el) {
@@ -495,6 +544,10 @@ const handleSortChange = ({ column, prop, order }) => {
   emit('sort-change', { column, prop, order })
 }
 
+const handleDefaultOperation = (command, row) => {
+  emit(command, row)
+}
+
 const handleSizeChange = (val) => {
   if (props.apiMethod) {
     fetchData()
@@ -528,32 +581,71 @@ defineExpose({
 }
 
 .search-card {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .search-form {
-  padding: 10px 0;
+  padding: 4px 0;
+  font-size: 12px;
 }
 
 .toolbar-card {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  padding: 4px 0;
+  font-size: 12px;
 }
 
 .toolbar-left,
 .toolbar-right {
   display: flex;
-  gap: 10px;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .table-card {
-  margin-top: 10px;
+  margin-top: 6px;
+}
+
+:deep(.search-card .el-card__body),
+:deep(.toolbar-card .el-card__body) {
+  padding: 8px 12px;
+}
+
+:deep(.search-form .el-form-item) {
+  margin-right: 10px;
+  margin-bottom: 4px;
+}
+
+:deep(.search-form .el-form-item__label) {
+  height: 26px;
+  line-height: 26px;
+  font-size: 12px;
+}
+
+:deep(.search-form .el-input__wrapper),
+:deep(.search-form .el-select__wrapper) {
+  min-height: 26px;
+  font-size: 12px;
+}
+
+:deep(.search-form .el-input__inner),
+:deep(.search-form .el-select__placeholder),
+:deep(.search-form .el-select__selected-item) {
+  font-size: 12px;
+}
+
+:deep(.search-form .el-button),
+:deep(.toolbar .el-button) {
+  height: 26px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .table-cell-content {
@@ -565,16 +657,61 @@ defineExpose({
 }
 
 :deep(.el-table .el-table__row) {
-  height: 48px;
+  height: 38px;
 }
 
 :deep(.el-table .el-table__cell) {
-  padding: 8px 0;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+:deep(.el-table .cell) {
+  line-height: 20px;
+}
+
+:deep(.el-table__header .cell) {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:deep(.el-table .el-button) {
+  font-size: 12px;
+}
+
+:deep(.el-table .el-table__cell:last-child .cell) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+:deep(.el-table .el-table__cell:last-child .el-button),
+:deep(.el-table .el-table__cell:last-child .el-dropdown) {
+  vertical-align: middle;
+}
+
+:deep(.el-table .el-table__cell:last-child .el-button.is-link) {
+  height: 20px;
+  padding: 0;
+  line-height: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+:deep(.el-table .el-table__cell:last-child .el-button .el-icon) {
+  height: 14px;
+  line-height: 14px;
+}
+
+:deep(.el-table .el-table__cell:last-child .el-button + .el-button) {
+  margin-left: 0;
 }
 
 .pagination {
-  margin-top: 20px;
+  margin-top: 10px;
   display: flex;
   justify-content: flex-end;
+  font-size: 12px;
 }
 </style>

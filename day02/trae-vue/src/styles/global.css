@@ -99,3 +99,101 @@ html, body, #app {
 .overflow-auto {
   overflow: auto;
 }
+
+/* 紧凑搜索区和按钮区 */
+.filter-section,
+.log-toolbar-card,
+.search-card,
+.toolbar-card {
+  font-size: 12px;
+}
+
+.filter-section .el-card__body,
+.log-toolbar-card .el-card__body {
+  padding: 8px 12px;
+}
+
+.table-actions,
+.header-buttons,
+.toolbar-left,
+.toolbar-right,
+.api-step-form,
+.query-input-row,
+.api-step-query,
+.log-toolbar {
+  gap: 6px !important;
+}
+
+.table-actions,
+.header-buttons,
+.api-step-form,
+.log-toolbar {
+  margin-bottom: 8px !important;
+}
+
+.filter-section {
+  padding: 6px 0 !important;
+  margin-bottom: 10px !important;
+}
+
+.filter-form {
+  gap: 6px !important;
+}
+
+.table-actions .el-button,
+.header-buttons .el-button,
+.toolbar-left .el-button,
+.toolbar-right .el-button,
+.api-step-form .el-button,
+.api-step-query .el-button,
+.query-input-row .el-button,
+.log-toolbar .el-button {
+  height: 26px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.table-actions .el-button.is-circle,
+.operation-meta .el-button.is-circle {
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+}
+
+.api-step-form .el-form-item,
+.filter-form .el-form-item,
+.testcase-token-form .el-form-item {
+  margin-bottom: 4px;
+}
+
+.api-step-form .el-form-item__label,
+.filter-form .el-form-item__label,
+.testcase-token-form .el-form-item__label {
+  height: 26px;
+  line-height: 26px;
+  font-size: 12px;
+}
+
+.api-step-form .el-input__wrapper,
+.api-step-form .el-select__wrapper,
+.api-step-query .el-input__wrapper,
+.query-input-row .el-input__wrapper,
+.filter-form .el-input__wrapper,
+.filter-form .el-select__wrapper,
+.testcase-token-form .el-select__wrapper {
+  min-height: 26px;
+  font-size: 12px;
+}
+
+.api-step-form .el-input__inner,
+.api-step-form .el-select__placeholder,
+.api-step-form .el-select__selected-item,
+.api-step-query .el-input__inner,
+.query-input-row .el-input__inner,
+.filter-form .el-input__inner,
+.filter-form .el-select__placeholder,
+.filter-form .el-select__selected-item,
+.testcase-token-form .el-select__placeholder,
+.testcase-token-form .el-select__selected-item {
+  font-size: 12px;
+}

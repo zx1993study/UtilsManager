@@ -22,6 +22,7 @@ class ApiInfoBase(BaseModel):
     method_url: Optional[str] = Field(None, description="方法URL")
     project_id: Optional[int] = Field(None, description="项目id")
     token_id: Optional[int] = Field(None, description="tokenId")
+    token_ids: Optional[list[int]] = Field(None, description="tokenIds")
     request_header: Optional[str] = Field(None, description="请求头")
     params_path: Optional[str] = Field(None, description="参数位置")
     description: Optional[str] = Field(None, description="描述")
@@ -44,6 +45,33 @@ class ApiInfoList(ApiInfoBase):
             filter_params.append(ApiInfo.token_id == self.token_id)
         return filter_params
 
+
+class ApiInfoOptionQuery(ApiInfoBase):
+    def filter_params(self):
+        filter_params = []
+        if self.api_name is not None:
+            filter_params.append(ApiInfo.api_name.contains(self.api_name))
+        if self.method_type is not None:
+            filter_params.append(ApiInfo.method_type == self.method_type)
+        if self.method_url is not None:
+            filter_params.append(ApiInfo.method_url.contains(self.method_url))
+        if self.project_id is not None:
+            filter_params.append(ApiInfo.project_id == self.project_id)
+        return filter_params
+
+
+class ApiInfoOption(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True
+    )
+
+    api_id: int = Field(..., description="主键")
+    api_name: Optional[str] = Field(None, description="接口名称")
+    method_url: Optional[str] = Field(None, description="方法URL")
+    method_type: Optional[int] = Field(None, description="方法类型")
+
 class ApiInfoCreate(ApiInfoBase):
     """接口信息创建Schema"""
     pass
@@ -54,6 +82,7 @@ class ApiInfoUpdate(ApiInfoBase):
 
 
 class ApiInfoInfo(ApiInfoBase):
+    token_names: Optional[list[str]] = Field(None, description="tokenNames")
     """接口信息响应Schema"""
     api_id: Optional[int] = Field(None, description="主键")
     project_name: Optional[str] = Field(None, description="项目名称")

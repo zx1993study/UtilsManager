@@ -32,25 +32,25 @@
           <span>详情</span>
         </el-button>
         
-        <el-button
-          type="warning"
-          size="small"
-          link
-          @click="handleEditRemark(row)"
-        >
+        <el-dropdown trigger="click" @command="command => handleMoreCommand(command, row)">
+          <el-button type="primary" size="small" link>
+            <span>更多</span>
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="remark">
           <el-icon><Edit /></el-icon>
           <span>备注</span>
-        </el-button>
+              </el-dropdown-item>
         
-        <el-button
-          type="danger"
-          size="small"
-          link
-          @click="handleDelete(row)"
-        >
+              <el-dropdown-item command="delete">
           <el-icon><Delete /></el-icon>
           <span>删除</span>
-        </el-button>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </template>
     </common-table>
 
@@ -102,7 +102,7 @@ import { ref, reactive } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { View, Edit, Delete } from '@element-plus/icons-vue'
+import { ArrowDown, View, Edit, Delete } from '@element-plus/icons-vue'
 import * as apiResultApi from '@/api/api/api-result'
 import { handleApiResponse } from '@/utils/responseHandler'
 
@@ -233,6 +233,14 @@ const handleEditRemark = (row) => {
 }
 
 // 提交备注
+const handleMoreCommand = (command, row) => {
+  const actions = {
+    remark: handleEditRemark,
+    delete: handleDelete
+  }
+  actions[command]?.(row)
+}
+
 const handleRemarkSubmit = async () => {
   try {
     remarkSubmitLoading.value = true

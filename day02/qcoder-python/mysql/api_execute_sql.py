@@ -24,8 +24,9 @@ def get_api_execution_context(db: Session, instance_id: int) -> Optional[Dict[st
     project_info = db.query(ProjectInfo).filter(ProjectInfo.project_id == api_info.project_id).first()
     
     token_info = None
-    if api_info.token_id:
-        token_info = db.query(TokenInfo).filter(TokenInfo.token_id == api_info.token_id).first()
+    token_id = instance.token_id or api_info.token_id
+    if token_id:
+        token_info = db.query(TokenInfo).filter(TokenInfo.token_id == token_id).first()
         
     return {
         "instance": instance,
@@ -71,6 +72,19 @@ def update_api_instance_exec_count(db: Session, instance_id: int) -> bool:
     instance = db.query(ApiInstance).filter(ApiInstance.instance_id == instance_id).first()
     if instance:
         instance.exec_count = (instance.exec_count or 0) + 1
+        db.commit()
+        return True
+    return False
+
+def update_api_instance_execute_state(db: Session, instance_id: int, success: bool) -> bool:
+    """更新 API 测试用例执行次数和执行状态。
+
+    status: 0 未执行，1 成功，2 失败
+    """
+    instance = db.query(ApiInstance).filter(ApiInstance.instance_id == instance_id).first()
+    if instance:
+        instance.exec_count = (instance.exec_count or 0) + 1
+        instance.status = 1 if success else 2
         db.commit()
         return True
     return False

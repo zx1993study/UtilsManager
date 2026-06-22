@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="api-testcase">
     <common-table
       ref="tableRef"
@@ -53,6 +53,7 @@
           placeholder="请选择API"
           style="width: 100%"
           :disabled="!formData.projectId"
+          @change="handleApiChange"
         >
           <el-option
             v-for="item in apiOptions"
@@ -63,6 +64,17 @@
         </el-select>
       </el-form-item>
 
+
+      <el-form-item label="Token" prop="tokenId">
+        <el-select v-model="formData.tokenId" placeholder="请选择Token" style="width: 100%" clearable>
+          <el-option
+            v-for="item in tokenOptions"
+            :key="item.tokenId"
+            :label="item.name"
+            :value="item.tokenId"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="用例名称" prop="instanceName">
         <el-input v-model="formData.instanceName" placeholder="请输入用例名称" />
       </el-form-item>
@@ -102,6 +114,7 @@ const submitLoading = ref(false)
 // 下拉框选项
 const projectOptions = ref([])
 const apiOptions = ref([])
+const tokenOptions = ref([])
 
 // 列配置
 const columns = [
@@ -151,6 +164,7 @@ const formData = reactive({
   instanceId: null,
   projectId: '',
   apiId: '',
+  tokenId: null,
   instanceName: '',
   description: '',
   expectResult: '',
@@ -201,7 +215,7 @@ const loadProjectList = async () => {
 // 加载API列表
 const loadApiList = async (projectId) => {
   try {
-    const response = await apiListApi.getApiList({ projectId })
+    const response = await apiListApi.getApiOptions({ projectId })
     apiOptions.value = response.data.items.map(item => ({
       label: item.apiName,
       value: item.apiId
@@ -211,9 +225,39 @@ const loadApiList = async (projectId) => {
   }
 }
 
+const buildTokenOptionsFromApi = (apiDetail = {}) => {
+  const ids = Array.isArray(apiDetail.tokenIds) ? apiDetail.tokenIds : (apiDetail.tokenId ? [apiDetail.tokenId] : [])
+  const names = Array.isArray(apiDetail.tokenNames) ? apiDetail.tokenNames : []
+  tokenOptions.value = ids.map((tokenId, index) => ({
+    tokenId,
+    name: names[index] || (index === 0 ? apiDetail.tokenName : `Token ${tokenId}`)
+  }))
+}
+
+const getDefaultTokenId = () => tokenOptions.value[0]?.tokenId || null
+
+const loadTokenOptionsByApi = async (apiId, currentTokenId = null) => {
+  tokenOptions.value = []
+  formData.tokenId = null
+  if (!apiId) return
+  try {
+    const response = await apiListApi.getApiDetail(apiId)
+    buildTokenOptionsFromApi(response.data || {})
+    formData.tokenId = currentTokenId || getDefaultTokenId()
+  } catch (error) {
+    console.error('加载Token列表失败:', error)
+  }
+}
+
+const handleApiChange = async (apiId) => {
+  await loadTokenOptionsByApi(apiId)
+}
+
 // 处理项目变化
 const handleProjectChange = (projectId) => {
   formData.apiId = ''
+  formData.tokenId = null
+  tokenOptions.value = []
   if (projectId) {
     loadApiList(projectId)
   } else {
@@ -229,6 +273,7 @@ const handleAdd = () => {
     instanceId: null,
     projectId: '',
     apiId: '',
+    tokenId: null,
     instanceName: '',
     description: '',
     expectResult: '',
@@ -239,13 +284,16 @@ const handleAdd = () => {
 }
 
 // 编辑
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   isEdit.value = true
   dialogTitle.value = '编辑用例'
   Object.assign(formData, row)
   // 如果有项目ID，加载对应的API列表
   if (row.projectId) {
-    loadApiList(row.projectId)
+    await loadApiList(row.projectId)
+  }
+  if (row.apiId) {
+    await loadTokenOptionsByApi(row.apiId, row.tokenId)
   }
   dialogVisible.value = true
 }
@@ -322,3 +370,5 @@ onMounted(() => {
   tableRef.value.refresh()
 })
 </script>
+
+

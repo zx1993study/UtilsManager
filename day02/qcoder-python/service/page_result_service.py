@@ -2,9 +2,11 @@
 页面结果 Service 层
 """
 import json
+import os
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.responsemsg import error_response, success_response
 from models.page_info_model import PageInfo
 from models.page_instance_model import PageInstance
@@ -19,6 +21,55 @@ from mysql.page_result_sql import (
 )
 from schemas.page_result_schemas import PageResultCreate, PageResultInfo, PageResultUpdate
 from utils.pagination import create_page_response
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _screenshot_dir() -> str:
+    path = settings.PLAYWRIGHT_SCREENSHOT_PATH or "./playwright_screenshots"
+    if not os.path.isabs(path):
+        path = os.path.join(BASE_DIR, path)
+    return os.path.abspath(path)
+
+
+def _normalize_screenshot_paths(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed if item]
+        except json.JSONDecodeError:
+            pass
+        return [value]
+    return []
+
+
+def _delete_screenshot_files(value) -> list[str]:
+    base_dir = _screenshot_dir()
+    deleted = []
+    for raw_path in _normalize_screenshot_paths(value):
+        clean_path = str(raw_path).replace("\\", "/")
+        file_name = os.path.basename(clean_path)
+        if not file_name:
+            continue
+        target_path = os.path.abspath(os.path.join(base_dir, file_name))
+        try:
+            if os.path.commonpath([base_dir, target_path]) != base_dir:
+                continue
+            if os.path.isfile(target_path):
+                os.remove(target_path)
+                deleted.append(file_name)
+        except OSError:
+            continue
+    return deleted
+
+
+def delete_result_screenshot_files(value) -> list[str]:
+    return _delete_screenshot_files(value)
 
 
 async def get_page_result_service(db: Session, item_id: int):
@@ -149,14 +200,24 @@ async def delete_page_result_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "页面结果不存在"}',
         )
 
+    screenshot_path = existing.screenshot_path
     await delete_page_result(db, item_id)
-    return success_response(msg="删除成功", data={"id": item_id, "message": "页面结果已删除"})
+    deleted_screenshots = _delete_screenshot_files(screenshot_path)
+    return success_response(
+        msg="删除成功",
+        data={
+            "id": item_id,
+            "message": "页面结果已删除",
+            "deleted_screenshots": deleted_screenshots,
+        },
+    )
 
 
 async def delete_page_result_batch_service(db: Session, ids: list[int]):
     """批量删除页面结果。"""
     deleted_ids = []
     not_found_ids = []
+    deleted_screenshots = []
 
     for item_id in ids:
         existing = await get_page_result_by_id(db, item_id)
@@ -164,20 +225,37 @@ async def delete_page_result_batch_service(db: Session, ids: list[int]):
             not_found_ids.append(item_id)
             continue
 
+        screenshot_path = existing.screenshot_path
         await delete_page_result(db, item_id)
+        deleted_screenshots.extend(_delete_screenshot_files(screenshot_path))
         deleted_ids.append(item_id)
 
     return success_response(
         msg="批量删除完成",
-        data={"deleted_ids": deleted_ids, "not_found_ids": not_found_ids},
+        data={
+            "deleted_ids": deleted_ids,
+            "not_found_ids": not_found_ids,
+            "deleted_screenshots": deleted_screenshots,
+        },
     )
 
 
 async def clear_page_result_service(db: Session):
     """清空页面结果。"""
+    screenshot_values = [
+        row.screenshot_path
+        for row in db.query(PageResult.screenshot_path).all()
+        if row.screenshot_path
+    ]
     count = db.query(PageResult).delete(synchronize_session=False)
     db.commit()
-    return success_response(msg="清空成功", data={"deleted": count})
+    deleted_screenshots = []
+    for value in screenshot_values:
+        deleted_screenshots.extend(_delete_screenshot_files(value))
+    return success_response(
+        msg="清空成功",
+        data={"deleted": count, "deleted_screenshots": deleted_screenshots},
+    )
 
 
 async def get_latest_page_result_by_instance_service(db: Session, instance_id: int):

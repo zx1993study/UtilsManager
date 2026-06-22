@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from core.db import get_db
-from schemas.api_info_schemas import ApiInfoCreate, ApiInfoUpdate, ApiInfoList, ApiInfoInfo, BatchDeleteRequest
+from schemas.api_info_schemas import ApiInfoCreate, ApiInfoUpdate, ApiInfoList, ApiInfoInfo, ApiInfoOptionQuery, BatchDeleteRequest
 from service.api_info_service import (
     get_api_info_service,
     get_api_info_list_service,
+    get_api_info_options_service,
     create_api_info_service,
     update_api_info_service,
     delete_api_info_service,
@@ -26,6 +27,14 @@ async def list_api_info(
 ):
     """获取接口信息分页列表"""
     return await get_api_info_list_service(db, data=data)
+
+
+@router.get("/apiInfo/options", response_model=dict)
+async def list_api_info_options(
+    data: ApiInfoOptionQuery = Depends(),
+    db: Session = Depends(get_db)
+):
+    return await get_api_info_options_service(db, data=data)
 
 
 @router.get("/apiInfo/{item_id}", response_model=dict)

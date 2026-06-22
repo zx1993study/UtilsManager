@@ -16,15 +16,34 @@
     <div class="content-layout">
       <el-card shadow="never" class="left-panel">
         <el-tabs v-model="leftActiveTab" class="panel-tabs">
-          <el-tab-pane label="参数JSON" name="params">
+          <el-tab-pane label="参数/结果" name="paramsResult">
             <div v-if="selectedInstance" class="tab-content">
-              <pre class="json-content">{{ formatJson(selectedOperationJson) }}</pre>
-            </div>
-            <el-empty v-else description="请选择实例" />
-          </el-tab-pane>
-
-          <el-tab-pane label="结果详情" name="result">
-            <div v-if="selectedInstance" class="tab-content">
+              <div class="section-block">
+                <el-form label-width="70px" class="testcase-token-form">
+                  <el-form-item label="Token">
+                    <el-select
+                      v-model="selectedInstance.tokenId"
+                      placeholder="请选择Token"
+                      style="width: 100%"
+                      clearable
+                      @change="handleSelectedTokenChange"
+                    >
+                      <el-option
+                        v-for="item in pageTokenOptions"
+                        :key="item.tokenId"
+                        :label="buildTokenLabel(item)"
+                        :value="item.tokenId"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <div class="section-block">
+                <div class="section-title">参数JSON</div>
+                <pre class="json-content">{{ formatJson(selectedOperationJson) }}</pre>
+              </div>
+              <div class="section-block">
+                <div class="section-title">结果详情</div>
               <el-descriptions v-if="latestResult" :column="1" border>
                 <el-descriptions-item label="状态">
                   <el-tag :type="latestResult.resultStatus === 1 ? 'success' : 'danger'">
@@ -38,7 +57,11 @@
                   <pre class="json-content">{{ latestResult.responseInfo || '-' }}</pre>
                 </el-descriptions-item>
               </el-descriptions>
+                <el-empty v-else description="暂无执行结果" />
+              </div>
 
+              <div class="section-block">
+                <div class="section-title">图片信息</div>
               <div v-if="screenshotList.length" class="screenshot-list">
                 <el-image
                   v-for="name in screenshotList"
@@ -50,6 +73,7 @@
                 />
               </div>
               <el-empty v-else description="暂无截图" />
+              </div>
             </div>
             <el-empty v-else description="请选择实例" />
           </el-tab-pane>
@@ -93,6 +117,106 @@
                   </el-button>
                 </template>
               </common-table>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="下拉框" name="apiDropdown">
+            <div class="tab-content">
+              <div class="api-step-card">
+                <div class="api-step-form">
+                  <el-form-item label="API">
+                    <el-select
+                      v-model="apiDropdown.apiId"
+                      filterable
+                      clearable
+                      placeholder="请选择API"
+                      class="api-step-select"
+                      @change="handleApiDropdownApiChange"
+                    >
+                      <el-option
+                        v-for="api in apiDropdown.apiOptions"
+                        :key="api.apiId"
+                        :label="api.apiName"
+                        :value="api.apiId"
+                      />
+                    </el-select>
+                  </el-form-item>
+
+                  <el-form-item label="用例">
+                    <el-select
+                      v-model="apiDropdown.instanceId"
+                      filterable
+                      clearable
+                      placeholder="请选择用例"
+                      class="api-step-select"
+                      :disabled="!apiDropdown.apiId"
+                      @change="handleApiDropdownCaseChange"
+                    >
+                      <el-option
+                        v-for="item in apiDropdown.caseOptions"
+                        :key="item.instanceId"
+                        :label="item.instanceName"
+                        :value="item.instanceId"
+                      />
+                    </el-select>
+                  </el-form-item>
+
+                  <el-form-item>
+                    <el-button
+                      type="primary"
+                      :loading="apiDropdown.running"
+                      :disabled="!apiDropdown.instanceId || apiDropdown.running"
+                      @click="handleRunApiDropdown"
+                    >
+                      <el-icon><VideoPlay /></el-icon>
+                      <span>运行</span>
+                    </el-button>
+                  </el-form-item>
+                </div>
+
+                <el-input
+                  v-model="apiDropdown.params"
+                  type="textarea"
+                  :rows="7"
+                  placeholder="参数JSON"
+                  class="api-step-json-input"
+                />
+
+                <div class="api-step-query">
+                  <el-input
+                    v-model="apiDropdown.queryKey"
+                    placeholder="输入要搜索的参数 key，多个用中文顿号分隔，例如 token、data.id"
+                    clearable
+                    @keyup.enter="handleQueryApiDropdownParam"
+                  />
+                  <el-button type="primary" @click="handleQueryApiDropdownParam">
+                    <el-icon><Search /></el-icon>
+                    <span>搜索参数</span>
+                  </el-button>
+                </div>
+
+                <div v-if="apiDropdown.queryResult" class="query-result">
+                  <div class="response-label">搜索结果：</div>
+                  <pre class="json-content">{{ apiDropdown.queryResult }}</pre>
+                </div>
+
+                <div v-if="apiDropdown.result" class="result-section">
+                  <el-divider content-position="left">结果详情</el-divider>
+                  <el-descriptions :column="1" border size="small">
+                    <el-descriptions-item label="Code">
+                      <el-tag :type="getCodeType(apiDropdown.result.code)">
+                        {{ apiDropdown.result.code || '-' }}
+                      </el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="耗时">
+                      {{ apiDropdown.result.remark || '-' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="响应信息">
+                      <pre class="json-content">{{ formatJson(apiDropdown.result.responseInfo) }}</pre>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </div>
+                <el-empty v-else description="请选择用例并运行" />
+              </div>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -141,7 +265,7 @@
             >
               <template #status="{ row }">
                 <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-                  {{ row.status === 1 ? '启用' : '禁用' }}
+                  {{ row.status === 1 ? '执行成功' : '执行失败' }}
                 </el-tag>
               </template>
 
@@ -157,18 +281,28 @@
                   <el-icon><VideoPlay /></el-icon>
                   <span>运行</span>
                 </el-button>
-                <el-button type="primary" size="small" link @click.stop="handleEditInstance(row)">
+                <el-dropdown trigger="click" @command="command => handleInstanceMoreCommand(command, row)">
+                  <el-button type="primary" size="small" link @click.stop>
+                    <span>更多</span>
+                    <el-icon><ArrowDown /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="edit">
                   <el-icon><Edit /></el-icon>
                   <span>编辑</span>
-                </el-button>
-                <el-button type="primary" size="small" link @click.stop="handleCopyInstance(row)">
+                      </el-dropdown-item>
+                      <el-dropdown-item command="copy">
                   <el-icon><Plus /></el-icon>
                   <span>复制</span>
-                </el-button>
-                <el-button type="danger" size="small" link @click.stop="handleDeleteInstance(row)">
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete">
                   <el-icon><Delete /></el-icon>
                   <span>删除</span>
-                </el-button>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </template>
             </common-table>
           </el-tab-pane>
@@ -182,14 +316,149 @@
       :form-data="instanceForm"
       :rules="instanceRules"
       :loading="submitLoading"
-      width="720px"
+      width="960px"
       @confirm="handleSubmitInstance"
     >
       <el-form-item label="实例名称" prop="instanceName">
         <el-input v-model="instanceForm.instanceName" placeholder="请输入实例名称" />
       </el-form-item>
+      <el-form-item label="Token" prop="tokenId">
+        <el-select v-model="instanceForm.tokenId" placeholder="请选择Token" style="width: 100%" clearable>
+          <el-option
+            v-for="item in pageTokenOptions"
+            :key="item.tokenId"
+            :label="buildTokenLabel(item)"
+            :value="item.tokenId"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="操作JSON" prop="operationJson">
-        <el-input v-model="instanceForm.operationJson" type="textarea" :rows="6" placeholder="请输入操作JSON" />
+        <div class="operation-json-editor">
+          <div v-if="operationJsonItems.length" class="operation-list">
+            <div
+              v-for="item in operationJsonItems"
+              :key="item.key"
+              :class="['operation-item', { 'operation-item-deleted': item.deleted }]"
+            >
+              <div class="operation-meta">
+                <el-tag size="small" effect="plain">#{{ item.elementId }}</el-tag>
+                <span class="operation-name">{{ item.elementName }}</span>
+                <el-tag size="small" type="info" effect="plain">{{ item.elementTypeLabel }}</el-tag>
+                <el-tag size="small" type="success" effect="plain">{{ item.operationLabel }}</el-tag>
+                <el-tooltip content="步骤后截图" placement="top">
+                  <el-button
+                    :type="item.screenAfter ? 'primary' : 'default'"
+                    size="small"
+                    circle
+                    @click="toggleOperationScreenAfter(item)"
+                  >
+                    <el-icon><Camera /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="['text', 'textarea'].includes(item.valueMode)"
+                  content="值追加执行次数+1"
+                  placement="top"
+                >
+                  <el-button
+                    :type="item.execCountSuffix ? 'warning' : 'default'"
+                    size="small"
+                    circle
+                    @click="toggleExecCountSuffix(item)"
+                  >
+                    +1
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip content="复制步骤" placement="top">
+                  <el-button
+                    type="success"
+                    size="small"
+                    circle
+                    @click="copyOperationItem(item)"
+                  >
+                    x{{ item.repeatCount || 1 }}
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip v-if="!item.deleted" content="删除操作" placement="top">
+                  <el-button
+                    type="danger"
+                    size="small"
+                    circle
+                    @click="removeOperationItem(item)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-button
+                  v-else
+                  type="primary"
+                  size="small"
+                  link
+                  @click="restoreOperationItem(item)"
+                >
+                  恢复
+                </el-button>
+              </div>
+
+              <input
+                v-if="item.valueMode === 'array'"
+                :value="formatArrayValue(item.value)"
+                placeholder="请输入下拉值，多个值用逗号分隔"
+                class="operation-control operation-array-input"
+                @input="updateArrayValue(item, $event.target.value)"
+              />
+              <el-input
+                v-else-if="item.valueMode === 'textarea'"
+                v-model="item.value"
+                type="textarea"
+                :rows="3"
+                placeholder="请输入参数值"
+                class="operation-control"
+                @input="syncOperationJsonFromItems"
+              />
+              <div v-if="item.valueMode === 'textarea'" class="operation-text-length">
+                总长度：{{ getTextLength(item.value) }}
+              </div>
+
+              <el-input
+                v-else-if="item.valueMode === 'path'"
+                v-model="item.value"
+                placeholder="请输入上传文件路径"
+                class="operation-control"
+                @input="syncOperationJsonFromItems"
+              />
+
+              <el-input-number
+                v-else-if="item.valueMode === 'number'"
+                v-model="item.value"
+                :min="0"
+                controls-position="right"
+                class="operation-control"
+                @change="syncOperationJsonFromItems"
+              />
+
+              <el-input
+                v-else-if="item.valueMode === 'text'"
+                v-model="item.value"
+                placeholder="无需参数，可按需填写"
+                class="operation-control"
+                @input="syncOperationJsonFromItems"
+              />
+              <div v-if="item.valueMode === 'text'" class="operation-text-length">
+                总长度：{{ getTextLength(item.value) }}
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无元素模板" />
+          <el-input
+            v-model="instanceForm.operationJson"
+            type="textarea"
+            :rows="5"
+            class="operation-json-raw"
+            placeholder="操作JSON预览"
+            @input="syncOperationItemsFromJson"
+          />
+        </div>
       </el-form-item>
       <el-form-item label="预期结果" prop="expectResult">
         <el-input v-model="instanceForm.expectResult" type="textarea" :rows="3" placeholder="请输入预期结果" />
@@ -202,8 +471,8 @@
       </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-radio-group v-model="instanceForm.status">
-          <el-radio :label="1">启用</el-radio>
-          <el-radio :label="0">禁用</el-radio>
+          <el-radio :label="1">执行成功</el-radio>
+          <el-radio :label="0">执行失败</el-radio>
         </el-radio-group>
       </el-form-item>
     </common-dialog>
@@ -214,7 +483,7 @@
       :form-data="elementForm"
       :rules="elementRules"
       :loading="elementSubmitLoading"
-      width="760px"
+      width="860px"
       @confirm="handleSubmitElement"
     >
       <el-form-item label="元素名称" prop="elementName">
@@ -264,7 +533,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Back, Delete, Edit, Plus, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowDown, Back, Camera, Delete, Edit, Plus, Search, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CommonDialog from '@/components/CommonDialog.vue'
 import CommonTable from '@/components/CommonTable.vue'
@@ -285,7 +554,11 @@ import {
   updatePageTemplate
 } from '@/api/page/page-template'
 import { getLatestPageResultByInstance } from '@/api/page/page-result'
+import * as apiInfoApi from '@/api/api/api'
+import * as apiTestcaseApi from '@/api/api/api-testcase'
+import * as apiResultApi from '@/api/api/api-result'
 import { handleApiResponse } from '@/utils/responseHandler'
+import { normalizeJsonObject } from '@/utils/json'
 
 const route = useRoute()
 const router = useRouter()
@@ -308,12 +581,28 @@ const instanceMode = ref('add')
 const elementDialogVisible = ref(false)
 const elementDialogTitle = ref('')
 const elementMode = ref('add')
+const operationJsonItems = ref([])
+const apiDropdown = reactive({
+  apiId: null,
+  instanceId: null,
+  params: '',
+  queryKey: '',
+  queryResult: '',
+  result: null,
+  running: false,
+  apiOptions: [],
+  caseOptions: []
+})
 
 const pageInfo = reactive({
   pageId,
   pageName: route.query.pageName || '',
-  pageUrl: route.query.pageUrl || ''
+  pageUrl: route.query.pageUrl || '',
+  tokenId: null,
+  tokenIds: [],
+  tokenNames: []
 })
+const pageTokenOptions = ref([])
 
 const pagination = reactive({
   page: 1,
@@ -324,6 +613,7 @@ const pagination = reactive({
 const instanceForm = reactive({
   pageInstanceId: null,
   pageId,
+  tokenId: null,
   instanceName: '',
   operationJson: '',
   expectResult: '',
@@ -410,12 +700,201 @@ const selectedOperationJson = computed(() => {
   return selectedInstance.value?.operationJson ?? selectedInstance.value?.operation_json ?? ''
 })
 
+const buildTokenLabel = (token) => {
+  const fileName = token.token ? ` / ${token.token}` : ''
+  return `${token.name || token.tokenName || token.tokenId}${fileName}`
+}
+
+const getDefaultTokenId = () => pageTokenOptions.value[0]?.tokenId || null
+
+const normalizeInstanceTokenId = (row = {}) => row.tokenId || getDefaultTokenId()
+
 const isInstanceRunning = (id) => runningInstanceIds.value.includes(id)
 
 const setInstanceRunning = (id, running) => {
   runningInstanceIds.value = running
     ? [...new Set([...runningInstanceIds.value, id])]
     : runningInstanceIds.value.filter(item => item !== id)
+}
+
+const formatInstanceJson = (jsonValue) => {
+  if (!jsonValue) return ''
+  try {
+    const parsed = typeof jsonValue === 'string' ? JSON.parse(jsonValue) : jsonValue
+    return JSON.stringify(parsed, null, 2)
+  } catch (error) {
+    return jsonValue
+  }
+}
+
+const getCodeType = (code) => {
+  if (!code) return 'info'
+  const codeNumber = Number(code)
+  if (codeNumber >= 200 && codeNumber < 300) return 'success'
+  if (codeNumber >= 400 && codeNumber < 500) return 'warning'
+  if (codeNumber >= 500) return 'danger'
+  return 'info'
+}
+
+const findAllValuesByKey = (obj, key) => {
+  const results = []
+  if (!key) return results
+  if (key.includes('.')) {
+    let current = obj
+    let matched = true
+    key.split('.').forEach(part => {
+      if (!matched) return
+      if (current && typeof current === 'object' && Object.prototype.hasOwnProperty.call(current, part)) {
+        current = current[part]
+      } else {
+        matched = false
+      }
+    })
+    if (matched && current !== undefined) {
+      results.push(current)
+    }
+    return results
+  }
+
+  const walk = (node) => {
+    if (Array.isArray(node)) {
+      node.forEach(walk)
+      return
+    }
+    if (!node || typeof node !== 'object') return
+    Object.keys(node).forEach(itemKey => {
+      if (itemKey === key) {
+        results.push(node[itemKey])
+      }
+      walk(node[itemKey])
+    })
+  }
+  walk(obj)
+  return results
+}
+
+const stringifyParamValue = (value) => {
+  if (value === null) return 'null'
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch (error) {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+const pickResponseList = (data) => {
+  if (Array.isArray(data)) return data
+  return data?.list || data?.records || data?.items || []
+}
+
+const loadApiDropdownApis = async () => {
+  try {
+    const res = await apiInfoApi.getApiOptions()
+    if (res.success) {
+      apiDropdown.apiOptions = pickResponseList(res.data)
+    }
+  } catch (error) {
+    console.error('加载API列表失败:', error)
+    ElMessage.error('加载API列表失败')
+  }
+}
+
+const loadApiDropdownCases = async (apiId) => {
+  apiDropdown.caseOptions = []
+  if (!apiId) return
+  try {
+    const res = await apiTestcaseApi.getTestcaseList({ apiId, pageNum: 1, pageSize: 100 })
+    if (res.success) {
+      apiDropdown.caseOptions = pickResponseList(res.data)
+    }
+  } catch (error) {
+    console.error('加载用例列表失败:', error)
+    ElMessage.error('加载用例列表失败')
+  }
+}
+
+const handleApiDropdownApiChange = async () => {
+  apiDropdown.instanceId = null
+  apiDropdown.params = ''
+  apiDropdown.queryKey = ''
+  apiDropdown.queryResult = ''
+  apiDropdown.result = null
+  await loadApiDropdownCases(apiDropdown.apiId)
+}
+
+const handleApiDropdownCaseChange = () => {
+  const selectedCase = apiDropdown.caseOptions.find(item => item.instanceId === apiDropdown.instanceId)
+  apiDropdown.params = selectedCase ? formatInstanceJson(selectedCase.instanceJson) : ''
+  apiDropdown.queryResult = ''
+  apiDropdown.result = null
+}
+
+const handleRunApiDropdown = async () => {
+  if (!apiDropdown.instanceId) {
+    ElMessage.warning('请先选择用例')
+    return
+  }
+  apiDropdown.running = true
+  try {
+    if (apiDropdown.params) {
+      await apiTestcaseApi.updateTestcase({
+        instanceId: apiDropdown.instanceId,
+        instanceJson: apiDropdown.params
+      })
+    }
+    await apiResultApi.executeApi(apiDropdown.instanceId)
+    const res = await apiResultApi.getLatestResultByInstanceId(apiDropdown.instanceId)
+    if (handleApiResponse(res, '运行成功', '运行失败')) {
+      apiDropdown.result = res.data || null
+      apiDropdown.queryResult = ''
+    }
+  } catch (error) {
+    console.error('运行API用例失败:', error)
+    ElMessage.error('运行API用例失败')
+  } finally {
+    apiDropdown.running = false
+  }
+}
+
+const handleQueryApiDropdownParam = () => {
+  const input = (apiDropdown.queryKey || '').trim()
+  if (!input) {
+    ElMessage.warning('请输入要搜索的参数')
+    return
+  }
+  const responseInfo = apiDropdown.result?.responseInfo
+  if (!responseInfo) {
+    ElMessage.warning('请先运行用例获取响应信息')
+    return
+  }
+  let data
+  try {
+    data = typeof responseInfo === 'string' ? JSON.parse(responseInfo) : responseInfo
+  } catch (error) {
+    ElMessage.error('响应信息不是有效JSON，无法搜索')
+    return
+  }
+  const keys = input.split(/[、,，]/).map(item => item.trim()).filter(Boolean)
+  const lines = []
+  let found = false
+  keys.forEach(key => {
+    const values = findAllValuesByKey(data, key)
+    if (!values.length) {
+      lines.push(`${key}:未找到`)
+      return
+    }
+    found = true
+    values.forEach(value => {
+      lines.push(`${key}:${stringifyParamValue(value)}`)
+    })
+  })
+  apiDropdown.queryResult = lines.join('\n')
+  if (!found) {
+    ElMessage.warning('未在响应中找到对应参数')
+  }
 }
 
 const getInstanceList = (params) => {
@@ -452,26 +931,290 @@ const getNthRemarkValue = (remark) => {
   return ''
 }
 
-const buildAutoOperationJson = () => {
-  const result = {}
-  const usedKeys = new Set()
-  elementTemplates.value.forEach(item => {
-    const remark = parseRemark(item.remark)
-    const needParam = item.operation === 2 || item.operation === 4 || hasNthRemark(remark)
-    if (!needParam) return
+const getTemplateId = (item) => item.elementId || item.element_id
 
-    const baseKey = item.elementName || item.element_name || `element_${item.elementId || item.element_id || ''}`
-    const key = usedKeys.has(baseKey) ? `${baseKey}#${item.elementId || item.element_id}` : baseKey
-    usedKeys.add(key)
-    result[key] = hasNthRemark(remark) ? getNthRemarkValue(remark) : ''
+const getTemplateName = (item) => item.elementName || item.element_name || `element_${getTemplateId(item) || ''}`
+
+const getTemplateOperation = (item) => Number(item.operation || 0)
+
+const getTemplateElementType = (item) => Number(item.elementType || item.element_type || 0)
+
+const getTemplateLocatorType = (item) => Number(item.locatorType || item.locator_type || 0)
+
+const getTemplateElementValue = (item) => item.elementValue || item.element_value || ''
+
+const isButtonTemplate = (item) => {
+  return String(getTemplateElementValue(item)).toLowerCase().includes('button')
+}
+
+const getTemplateDefaultValue = (item) => {
+  const remark = parseRemark(item.remark)
+  if (remark && typeof remark === 'object' && !Array.isArray(remark)) {
+    return remark.defaultValue ?? ''
+  }
+  return ''
+}
+
+const isEditableOperation = (item) => {
+  return [1, 2, 3, 4].includes(getTemplateOperation(item))
+}
+
+const isSelectOptionTemplate = (item) => {
+  const operation = getTemplateOperation(item)
+  return operation === 1 && !isButtonTemplate(item) && getTemplateLocatorType(item) === 4
+}
+
+const buildOperationItemKey = (item) => {
+  const elementId = getTemplateId(item)
+  return `${getTemplateName(item)}#${elementId || ''}`
+}
+
+const uniqueValues = (values) => {
+  const result = []
+  const seen = new Set()
+  ;(Array.isArray(values) ? values : []).forEach(value => {
+    if (value === null || value === undefined) return
+    const text = String(value).trim()
+    if (!text || seen.has(text)) return
+    seen.add(text)
+    result.push(value)
   })
-  const lastTemplate = elementTemplates.value[elementTemplates.value.length - 1]
-  const lastElementId = lastTemplate?.elementId || lastTemplate?.element_id
-  if (lastElementId) {
-    const numericElementId = Number(lastElementId)
-    result.screenAfter = [Number.isNaN(numericElementId) ? lastElementId : numericElementId]
+  return result
+}
+
+const formatArrayValue = (value) => {
+  return (Array.isArray(value) ? value : [value].filter(Boolean)).join('，')
+}
+
+const parseArrayValue = (value) => {
+  return uniqueValues(String(value || '')
+    .split(/\r?\n|,|，/)
+    .map(item => item.trim())
+    .filter(Boolean))
+}
+
+const updateArrayValue = (item, value) => {
+  item.value = parseArrayValue(value)
+  syncOperationJsonFromItems()
+}
+
+const getTextLength = (value) => {
+  if (value === null || value === undefined) return 0
+  return String(value).length
+}
+
+const buildOperationJsonFromItems = () => {
+  const result = {}
+  const screenAfter = []
+  const skipElements = []
+  const valueMarks = {}
+  const repeatElements = {}
+  operationJsonItems.value.forEach(item => {
+    if (item.deleted) {
+      skipElements.push(...item.elementIds)
+      return
+    }
+    if (item.screenAfter) {
+      screenAfter.push(...item.elementIds)
+    }
+    if (item.paramKey && item.valueMode !== 'none') {
+      result[item.paramKey] = Array.isArray(item.value)
+        ? uniqueValues(item.value)
+        : item.value
+      if (item.execCountSuffix) {
+        valueMarks[item.paramKey] = 'execCountSuffix'
+      }
+    }
+    if ((item.repeatCount || 1) > 1) {
+      item.elementIds.forEach(elementId => {
+        repeatElements[String(elementId)] = item.repeatCount
+      })
+    }
+  })
+  if (screenAfter.length) {
+    result.screenAfter = screenAfter.map(value => {
+      const numberValue = Number(value)
+      return Number.isNaN(numberValue) ? value : numberValue
+    })
+  }
+  if (skipElements.length) {
+    result.skipElements = skipElements.map(value => {
+      const numberValue = Number(value)
+      return Number.isNaN(numberValue) ? value : numberValue
+    })
+  }
+  if (Object.keys(valueMarks).length) {
+    result.valueMarks = valueMarks
+  }
+  if (Object.keys(repeatElements).length) {
+    result.repeatElements = repeatElements
   }
   return JSON.stringify(result, null, 2)
+}
+
+const syncOperationJsonFromItems = () => {
+  instanceForm.operationJson = buildOperationJsonFromItems()
+}
+
+const syncOperationItemsFromJson = () => {
+  let parsed = {}
+  try {
+    parsed = JSON.parse(instanceForm.operationJson || '{}')
+  } catch (error) {
+    return
+  }
+  operationJsonItems.value.forEach(item => {
+    const screenAfter = new Set((parsed.screenAfter || []).map(value => String(value)))
+    const skipElements = new Set((parsed.skipElements || []).map(value => String(value)))
+    const valueMarks = parsed.valueMarks || {}
+    const repeatElements = parsed.repeatElements || {}
+    item.screenAfter = item.elementIds.some(elementId => screenAfter.has(String(elementId)))
+    item.deleted = item.elementIds.every(elementId => skipElements.has(String(elementId)))
+    item.execCountSuffix = item.paramKey ? valueMarks[item.paramKey] === 'execCountSuffix' : false
+    item.repeatCount = Number(item.elementIds.map(elementId => repeatElements[String(elementId)]).find(Boolean) || 1)
+    if (item.paramKey && Object.prototype.hasOwnProperty.call(parsed, item.paramKey)) {
+      item.value = item.valueMode === 'array'
+        ? uniqueValues(Array.isArray(parsed[item.paramKey]) ? parsed[item.paramKey] : [parsed[item.paramKey]].filter(Boolean))
+        : parsed[item.paramKey]
+    }
+  })
+}
+
+const toggleOperationScreenAfter = (item) => {
+  item.screenAfter = !item.screenAfter
+  syncOperationJsonFromItems()
+}
+
+const toggleExecCountSuffix = (item) => {
+  item.execCountSuffix = !item.execCountSuffix
+  syncOperationJsonFromItems()
+}
+
+const removeOperationItem = (item) => {
+  item.deleted = true
+  syncOperationJsonFromItems()
+}
+
+const restoreOperationItem = (item) => {
+  item.deleted = false
+  syncOperationJsonFromItems()
+}
+
+const copyOperationItem = (item) => {
+  item.repeatCount = (Number(item.repeatCount) || 1) + 1
+  syncOperationJsonFromItems()
+}
+
+const buildOperationJsonItems = (sourceJson = '') => {
+  let source = {}
+  try {
+    source = sourceJson ? JSON.parse(sourceJson) : {}
+  } catch (error) {
+    source = {}
+  }
+
+  const items = []
+  const screenAfter = new Set((source.screenAfter || []).map(value => String(value)))
+  const skipElements = new Set((source.skipElements || []).map(value => String(value)))
+  const valueMarks = source.valueMarks || {}
+  const repeatElements = source.repeatElements || {}
+  const editableTemplates = elementTemplates.value.filter(isEditableOperation)
+  for (let index = 0; index < editableTemplates.length; index += 1) {
+    const template = editableTemplates[index]
+    const remark = parseRemark(template.remark)
+    const elementId = getTemplateId(template)
+    const elementName = getTemplateName(template)
+    const operation = getTemplateOperation(template)
+    const elementType = getTemplateElementType(template)
+    const paramKey = buildOperationItemKey(template)
+
+    if (isSelectOptionTemplate(template)) {
+      const previous = items[items.length - 1]
+      if (previous?.valueMode === 'array' && previous.groupOpen) {
+        previous.value = uniqueValues([...previous.value, elementName])
+        previous.options = uniqueValues([...previous.options, elementName])
+        previous.elementIds.push(elementId)
+        previous.screenAfter = previous.elementIds.some(id => screenAfter.has(String(id)))
+        previous.deleted = previous.elementIds.every(id => skipElements.has(String(id)))
+        previous.execCountSuffix = valueMarks[previous.paramKey] === 'execCountSuffix'
+        previous.repeatCount = Number(previous.elementIds.map(id => repeatElements[String(id)]).find(Boolean) || 1)
+      } else if (previous) {
+        const rawValue = source[previous.paramKey]
+        previous.elementTypeLabel = '下拉框'
+        previous.operationLabel = '选择'
+        previous.valueMode = 'array'
+        previous.value = uniqueValues(Array.isArray(rawValue) ? rawValue : [elementName])
+        previous.options = uniqueValues([elementName])
+        previous.elementIds = [...new Set([...previous.elementIds, elementId])]
+        previous.groupOpen = true
+        previous.screenAfter = previous.elementIds.some(id => screenAfter.has(String(id)))
+        previous.deleted = previous.elementIds.every(id => skipElements.has(String(id)))
+        previous.execCountSuffix = valueMarks[previous.paramKey] === 'execCountSuffix'
+        previous.repeatCount = Number(previous.elementIds.map(id => repeatElements[String(id)]).find(Boolean) || 1)
+      } else {
+        const previousTemplate = editableTemplates[index - 1]
+        const previousName = previousTemplate ? getTemplateName(previousTemplate) : elementName
+        const previousId = previousTemplate ? getTemplateId(previousTemplate) : elementId
+        const groupKey = `${previousName}#${previousId || elementId || ''}`
+        const rawValue = source[groupKey]
+        items.push({
+          key: `select_group_${elementId}`,
+          paramKey: groupKey,
+          elementId: previousId || elementId,
+          elementIds: [elementId],
+          elementName: previousName,
+          elementTypeLabel: '下拉框',
+          operationLabel: '选择',
+          valueMode: 'array',
+          value: uniqueValues(Array.isArray(rawValue) ? rawValue : [elementName]),
+          options: uniqueValues([elementName]),
+          screenAfter: screenAfter.has(String(elementId)),
+          deleted: skipElements.has(String(elementId)),
+          execCountSuffix: valueMarks[groupKey] === 'execCountSuffix',
+          repeatCount: Number(repeatElements[String(elementId)] || 1),
+          groupOpen: true
+        })
+      }
+      continue
+    }
+
+    if (items.length) {
+      items[items.length - 1].groupOpen = false
+    }
+
+    const rawValue = source[paramKey] ?? source[elementName] ?? source[String(elementId)]
+    const nthValue = hasNthRemark(remark) ? getNthRemarkValue(remark) : ''
+    const buttonTemplate = isButtonTemplate(template)
+    const valueMode = operation === 2
+      ? 'textarea'
+      : (operation === 4 ? 'path' : (hasNthRemark(remark) ? 'number' : (buttonTemplate ? 'text' : 'none')))
+    const defaultValue = operation === 4 ? getTemplateDefaultValue(template) : ''
+    items.push({
+      key: `template_${elementId}`,
+      paramKey,
+      elementId,
+      elementIds: [elementId],
+      elementName,
+      elementTypeLabel: buttonTemplate ? '按钮' : getOptionLabel(elementTypeOptions, elementType),
+      operationLabel: getOptionLabel(operationOptions, operation),
+      valueMode,
+      value: rawValue ?? (hasNthRemark(remark) ? nthValue : defaultValue),
+      options: [],
+      screenAfter: screenAfter.has(String(elementId)),
+      deleted: skipElements.has(String(elementId)),
+      execCountSuffix: valueMarks[paramKey] === 'execCountSuffix',
+      repeatCount: Number(repeatElements[String(elementId)] || 1),
+      groupOpen: false
+    })
+  }
+
+  operationJsonItems.value = items
+  syncOperationJsonFromItems()
+}
+
+const buildAutoOperationJson = () => {
+  buildOperationJsonItems()
+  return instanceForm.operationJson
 }
 
 const loadPageInfo = async () => {
@@ -481,8 +1224,15 @@ const loadPageInfo = async () => {
       Object.assign(pageInfo, {
         pageId: res.data.pageId,
         pageName: res.data.pageName || pageInfo.pageName,
-        pageUrl: res.data.pageUrl || pageInfo.pageUrl
+        pageUrl: res.data.pageUrl || pageInfo.pageUrl,
+        tokenId: res.data.tokenId || null,
+        tokenIds: Array.isArray(res.data.tokenIds) ? res.data.tokenIds : (res.data.tokenId ? [res.data.tokenId] : []),
+        tokenNames: Array.isArray(res.data.tokenNames) ? res.data.tokenNames : []
       })
+      pageTokenOptions.value = pageInfo.tokenIds.map((tokenId, index) => ({
+        tokenId,
+        name: pageInfo.tokenNames[index] || (index === 0 ? res.data.tokenName : `Token ${tokenId}`)
+      }))
     }
   } catch (error) {
       console.error('加载页面功能详情失败:', error)
@@ -605,8 +1355,17 @@ const handleSelectionChange = (selection) => {
 }
 
 const handleViewInstance = (row) => {
-  selectedInstance.value = row
-  leftActiveTab.value = 'params'
+  selectedInstance.value = {
+    ...row,
+    tokenId: normalizeInstanceTokenId(row)
+  }
+  leftActiveTab.value = 'paramsResult'
+}
+
+const handleSelectedTokenChange = (tokenId) => {
+  if (selectedInstance.value) {
+    selectedInstance.value.tokenId = tokenId || null
+  }
 }
 
 const handleRunInstance = (row) => {
@@ -614,11 +1373,15 @@ const handleRunInstance = (row) => {
     return
   }
   setInstanceRunning(row.pageInstanceId, true)
-  executePageTestCase(pageId, row.pageInstanceId)
+  const tokenId = row.tokenId || selectedInstance.value?.tokenId || normalizeInstanceTokenId(row)
+  executePageTestCase(pageId, row.pageInstanceId, tokenId)
     .then(async (res) => {
       if (handleApiResponse(res, '运行成功', '运行失败')) {
-        selectedInstance.value = row
-        leftActiveTab.value = 'result'
+        selectedInstance.value = {
+          ...row,
+          tokenId
+        }
+        leftActiveTab.value = 'paramsResult'
         await loadLatestResult()
         instanceTableRef.value?.refresh()
       }
@@ -668,6 +1431,7 @@ const resetInstanceForm = () => {
   Object.assign(instanceForm, {
     pageInstanceId: null,
     pageId,
+    tokenId: getDefaultTokenId(),
     instanceName: '',
     operationJson: '',
     expectResult: '',
@@ -685,6 +1449,7 @@ const handleAddInstance = async () => {
     await loadElementTemplates()
   }
   instanceForm.operationJson = buildAutoOperationJson()
+  buildOperationJsonItems(instanceForm.operationJson)
   instanceDialogVisible.value = true
 }
 
@@ -695,6 +1460,7 @@ const handleEditInstance = (row) => {
   Object.assign(instanceForm, {
     pageInstanceId: row.pageInstanceId,
     pageId,
+    tokenId: normalizeInstanceTokenId(row),
     instanceName: row.instanceName || '',
     operationJson: row.operationJson ?? row.operation_json ?? '',
     expectResult: row.expectResult || '',
@@ -702,7 +1468,17 @@ const handleEditInstance = (row) => {
     remark: row.remark || '',
     status: row.status ?? 1
   })
+  buildOperationJsonItems(instanceForm.operationJson)
   instanceDialogVisible.value = true
+}
+
+const handleInstanceMoreCommand = (command, row) => {
+  const actions = {
+    edit: handleEditInstance,
+    copy: handleCopyInstance,
+    delete: handleDeleteInstance
+  }
+  actions[command]?.(row)
 }
 
 const handleCopyInstance = (row) => {
@@ -712,6 +1488,7 @@ const handleCopyInstance = (row) => {
   Object.assign(instanceForm, {
     pageInstanceId: null,
     pageId,
+    tokenId: normalizeInstanceTokenId(row),
     instanceName: `${row.instanceName || ''}_复制`,
     operationJson: row.operationJson ?? row.operation_json ?? '',
     expectResult: row.expectResult || '',
@@ -719,6 +1496,7 @@ const handleCopyInstance = (row) => {
     remark: row.remark || '',
     status: row.status ?? 1
   })
+  buildOperationJsonItems(instanceForm.operationJson)
   instanceDialogVisible.value = true
 }
 
@@ -768,8 +1546,9 @@ const handleSubmitInstance = async () => {
   try {
     const payload = {
       pageId,
+      tokenId: instanceForm.tokenId,
       instanceName: instanceForm.instanceName,
-      operationJson: instanceForm.operationJson,
+      operationJson: normalizeJsonObject(instanceForm.operationJson),
       expectResult: instanceForm.expectResult,
       description: instanceForm.description,
       remark: instanceForm.remark,
@@ -787,6 +1566,7 @@ const handleSubmitInstance = async () => {
     }
   } catch (error) {
     console.error('提交实例失败:', error)
+    ElMessage.error(error.message || '提交实例失败')
   } finally {
     submitLoading.value = false
   }
@@ -804,7 +1584,7 @@ const formatJson = (value) => {
 
 function buildScreenshotUrl(name) {
   const base = import.meta.env.VITE_API_BASE_URL || '/api'
-  return `${base}/static/screenshots/${name}`
+  return `${base}/static/screenshots/${encodeURIComponent(name)}`
 }
 
 watch(selectedInstance, () => {
@@ -815,11 +1595,15 @@ watch(leftActiveTab, (tabName) => {
   if (tabName === 'elements') {
     loadElementTemplates()
   }
+  if (tabName === 'apiDropdown' && !apiDropdown.apiOptions.length) {
+    loadApiDropdownApis()
+  }
 })
 
 onMounted(async () => {
   await loadPageInfo()
   await loadElementTemplates()
+  await loadApiDropdownApis()
   instanceTableRef.value?.refresh()
 })
 </script>
@@ -893,6 +1677,17 @@ onMounted(async () => {
   padding: 10px 0;
 }
 
+.section-block + .section-block {
+  margin-top: 16px;
+}
+
+.section-title {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
 .json-content {
   margin: 0;
   padding: 10px;
@@ -920,12 +1715,137 @@ onMounted(async () => {
   background: #f5f7fa;
 }
 
+.api-step-card {
+  padding: 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.api-step-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.api-step-form :deep(.el-form-item) {
+  margin-bottom: 0;
+  margin-right: 0;
+}
+
+.api-step-select {
+  width: 220px;
+  max-width: 100%;
+}
+
+.api-step-json-input {
+  width: 100%;
+}
+
+.api-step-json-input :deep(.el-textarea__inner) {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.api-step-query {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.query-result,
+.result-section {
+  margin-top: 12px;
+}
+
+.response-label {
+  margin-bottom: 5px;
+  color: #909399;
+  font-size: 12px;
+}
+
 .table-actions,
 .script-toolbar {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.operation-json-editor {
+  width: 100%;
+  min-width: 0;
+}
+
+.operation-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.operation-item {
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fff;
+  min-width: 0;
+}
+
+.operation-item-deleted {
+  opacity: 0.58;
+  background: #f5f7fa;
+}
+
+.operation-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.operation-name {
+  flex: 1;
+  min-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #303133;
+}
+
+.operation-control,
+.operation-json-raw {
+  width: 100%;
+  min-width: 0;
+}
+
+.operation-text-length {
+  margin-top: 4px;
+  text-align: right;
+  color: #909399;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.operation-array-input {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 1px 11px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  outline: none;
+  color: #606266;
+  font-size: 12px;
+  line-height: 30px;
+  transition: border-color 0.2s;
+}
+
+.operation-array-input:focus {
+  border-color: #409eff;
 }
 
 .script-editor {

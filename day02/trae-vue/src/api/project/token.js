@@ -13,6 +13,15 @@ export function getTokenList(params) {
   })
 }
 
+// 获取Token下拉框列表，必须传 tokenType：1 API，2 Web
+export function getTokenOptions(params) {
+  return request({
+    url: '/api/v1/tokenInfo/options',
+    method: 'get',
+    params
+  })
+}
+
 // 获取Token详情
 export function getTokenDetail(id) {
   return request({

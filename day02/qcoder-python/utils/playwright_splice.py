@@ -157,7 +157,7 @@ class PlaywrightSplice:
 
         raise RuntimeError(f"Unsupported locator type: {locator_type}")
 
-    def _template_locator(self, page, template, params: dict | None = None):
+    def _template_locator(self, page, template, params: dict | None = None, apply_nth: bool = True):
         params = params or {}
         remark = _json_or_empty(template.remark)
         parents = []
@@ -189,9 +189,54 @@ class PlaywrightSplice:
             scope = self._locate(scope, int(parent.get("locator_type") or 0), parent.get("element_value"))
         locator = self._locate(scope, int(template.locator_type or 0), template.element_value)
         nth_value = self._nth_value(params, template, nth_value)
-        if nth_value is not None:
+        if apply_nth and nth_value is not None:
             locator = locator.nth(int(nth_value))
         return locator
+
+    def _click_template(self, page, template, params: dict, logs: list[str]) -> None:
+        param_value = self._param_value(params, template, None)
+        is_button = "button" in str(template.element_value or "").lower()
+        if is_button and param_value is not None and not isinstance(param_value, list) and str(param_value).strip() != "":
+            click_text = str(param_value).strip()
+            locator = page.get_by_role("button", name=click_text)
+            locator.wait_for(state="visible")
+            locator.click()
+            logs.append(f"[param-click-button] {template.element_name} => {click_text}")
+            return
+
+        remark = _json_or_empty(template.remark)
+        optional = self._is_optional_template(template)
+        nth_default = None
+        if isinstance(remark, list):
+            for item in remark:
+                if isinstance(item, dict) and "nth" in item:
+                    nth_default = item.get("nth")
+                    break
+        elif isinstance(remark, dict):
+            nth_default = remark.get("nth")
+
+        nth_value = self._nth_value(params, template, nth_default)
+        if nth_value is not None:
+            base_locator = self._template_locator(page, template, params, apply_nth=False)
+            count = base_locator.count()
+            if 0 < count <= int(nth_value):
+                index = count - 1
+                logs.append(f"[retry] {template.element_name} nth={nth_value} 超出匹配数量 {count}，改为点击 nth={index}")
+                base_locator.nth(index).click(timeout=2000 if optional else None)
+                return
+
+        locator = self._template_locator(page, template, params)
+        try:
+            locator.click(timeout=2000 if optional else None)
+        except Exception as error:
+            if optional:
+                logs.append(f"[skip] {template.element_name} 可选点击未找到，继续执行: {error}")
+                return
+            if nth_value is None:
+                raise
+            logs.append(f"[retry] {template.element_name} nth定位失败，回退基础定位器点击: {error}")
+            fallback_locator = self._template_locator(page, template, params, apply_nth=False)
+            fallback_locator.click()
 
     def _param_keys(self, template, param_key: str | None = None):
         keys = []
@@ -230,6 +275,24 @@ class PlaywrightSplice:
                 return params[key]
         return default
 
+    def _param_list_value(self, params: dict, group_keys: list[str], index: int):
+        for key in group_keys:
+            value = params.get(key)
+            if not isinstance(value, list) or index >= len(value):
+                continue
+            return value[index]
+        return None
+
+    def _click_select_option(self, page, template, text: Any) -> None:
+        text_value = str(text)
+        locator_type = int(template.locator_type or 0)
+        if locator_type == LOCATOR_LISTITEM_TEXT:
+            option_locator = page.get_by_role("listitem").filter(has_text=text_value).first
+        else:
+            option_locator = self._template_locator(page, template, apply_nth=False)
+        option_locator.wait_for(state="visible")
+        option_locator.click()
+
     def _screen_targets(self, params: dict, key: str) -> set[str]:
         raw_value = params.get(key)
         if raw_value is None:
@@ -244,6 +307,19 @@ class PlaywrightSplice:
             if value is not None and str(value).strip() != ""
         }
 
+    def _skip_targets(self, params: dict) -> set[str]:
+        return self._screen_targets(params, "skipElements")
+
+    def _repeat_count(self, params: dict, template) -> int:
+        repeat_elements = params.get("repeatElements")
+        if not isinstance(repeat_elements, dict):
+            return 1
+        raw_value = repeat_elements.get(self._template_element_id(template))
+        try:
+            return max(1, int(raw_value or 1))
+        except (TypeError, ValueError):
+            return 1
+
     def _template_element_id(self, template) -> str:
         value = getattr(template, "element_id", None)
         return "" if value is None else str(value)
@@ -251,6 +327,14 @@ class PlaywrightSplice:
     def _screen_target_matched(self, targets: set[str], template) -> bool:
         element_id = self._template_element_id(template)
         return bool(element_id and element_id in targets)
+
+    def _is_optional_template(self, template) -> bool:
+        remark = _json_or_empty(template.remark)
+        if isinstance(remark, dict):
+            return bool(remark.get("optional"))
+        if isinstance(remark, list):
+            return any(isinstance(item, dict) and item.get("optional") for item in remark)
+        return False
 
     def execute(
         self,
@@ -267,8 +351,11 @@ class PlaywrightSplice:
         params = params or {}
         logs = []
         captured_screenshots = []
+        select_group_keys = []
+        select_group_index = 0
         screen_before = self._screen_targets(params, "screenBefore")
         screen_after = self._screen_targets(params, "screenAfter")
+        skip_elements = self._skip_targets(params)
         context_kwargs = {}
         if token_json_path and os.path.exists(token_json_path):
             context_kwargs["storage_state"] = token_json_path
@@ -302,35 +389,66 @@ class PlaywrightSplice:
                     logs.append(f"[screen-{kind}] element_id={element_id} file={file_name}")
 
                 for index, template in enumerate(templates, start=1):
+                    if self._screen_target_matched(skip_elements, template):
+                        logs.append(f"[skip] element_id={self._template_element_id(template)} {template.element_name}")
+                        continue
                     logs.append(f"[{index}/{total}] {template.element_name} op={template.operation}")
                     if self._screen_target_matched(screen_before, template):
                         capture_screen("before", template)
-                    locator = self._template_locator(page, template, params)
                     operation = int(template.operation or 0)
-                    if operation == OP_CLICK:
-                        locator.click()
-                    elif operation == OP_FILL:
-                        value = self._param_value(params, template)
-                        locator.fill("" if value is None else str(value))
-                    elif operation == OP_SELECT:
-                        value = self._param_value(params, template)
-                        text_value = "" if value is None else str(value)
-                        try:
-                            locator.select_option(label=text_value)
-                        except Exception:
-                            locator.click()
-                            page.get_by_text(text_value, exact=True).click()
-                    elif operation == OP_UPLOAD:
-                        value = self._param_value(params, template)
-                        if value is None or str(value).strip() == "":
-                            raise RuntimeError(f"Upload file path is empty for {template.element_name}")
-                        if int(template.locator_type or 0) == LOCATOR_CSS:
-                            locator = locator.locator("input[type='file']").first
-                        locator.set_input_files(os.path.abspath(str(value)))
-                    else:
-                        raise RuntimeError(f"Unsupported operation: {operation}")
-                    if self._screen_target_matched(screen_after, template):
-                        capture_screen("after", template)
+                    repeat_count = self._repeat_count(params, template)
+                    for repeat_index in range(repeat_count):
+                        if repeat_count > 1:
+                            logs.append(f"[repeat {repeat_index + 1}/{repeat_count}] {template.element_name}")
+                        if operation == OP_CLICK:
+                            current_value = self._param_value(params, template, None)
+                            if isinstance(current_value, list):
+                                self._click_template(page, template, params, logs)
+                                select_group_keys = self._param_keys(template)
+                                select_group_index = 0
+                            else:
+                                list_value = self._param_list_value(params, select_group_keys, select_group_index)
+                                if list_value is not None and int(template.locator_type or 0) == LOCATOR_LISTITEM_TEXT:
+                                    self._click_select_option(page, template, list_value)
+                                    logs.append(f"[select-array] {template.element_name} => {list_value}")
+                                    select_group_index += 1
+                                else:
+                                    select_group_keys = []
+                                    select_group_index = 0
+                                    self._click_template(page, template, params, logs)
+                        elif operation == OP_FILL:
+                            select_group_keys = []
+                            select_group_index = 0
+                            locator = self._template_locator(page, template, params)
+                            value = self._param_value(params, template)
+                            locator.fill("" if value is None else str(value))
+                        elif operation == OP_SELECT:
+                            select_group_keys = self._param_keys(template)
+                            select_group_index = 0
+                            locator = self._template_locator(page, template, params)
+                            value = self._param_value(params, template)
+                            text_value = "" if value is None else str(value)
+                            try:
+                                locator.select_option(label=text_value)
+                            except Exception:
+                                locator.click()
+                                option_locator = page.get_by_text(text_value, exact=True)
+                                option_locator.wait_for(state="visible")
+                                option_locator.click()
+                        elif operation == OP_UPLOAD:
+                            select_group_keys = []
+                            select_group_index = 0
+                            locator = self._template_locator(page, template, params)
+                            value = self._param_value(params, template)
+                            if value is None or str(value).strip() == "":
+                                raise RuntimeError(f"Upload file path is empty for {template.element_name}")
+                            if int(template.locator_type or 0) == LOCATOR_CSS:
+                                locator = locator.locator("input[type='file']").first
+                            locator.set_input_files(os.path.abspath(str(value)))
+                        else:
+                            raise RuntimeError(f"Unsupported operation: {operation}")
+                        if self._screen_target_matched(screen_after, template):
+                            capture_screen("after", template)
 
                 if screenshot_path and not captured_screenshots:
                     page.screenshot(path=screenshot_path, full_page=True)

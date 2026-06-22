@@ -261,7 +261,27 @@ def _parse_json_object(raw: str | None) -> dict:
         parsed = json.loads(raw)
         return parsed if isinstance(parsed, dict) else {}
     except json.JSONDecodeError:
-        return {}
+        try:
+            parsed = json.loads(raw, strict=False)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+
+def _apply_value_marks(params: dict, exec_count: int | None = 0) -> dict:
+    result = dict(params or {})
+    value_marks = result.get("valueMarks")
+    if not isinstance(value_marks, dict):
+        return result
+    suffix = (exec_count or 0) + 1
+    for key, mark in value_marks.items():
+        if mark != "execCountSuffix" or key not in result:
+            continue
+        value = result.get(key)
+        if isinstance(value, (dict, list)) or value is None:
+            continue
+        result[key] = f"{value}{suffix}"
+    return result
 
 
 def _literal_arg(node: ast.AST | None):
@@ -639,7 +659,7 @@ async def save_token_json_by_instance(db: Session, page_instance_id: int, token_
 
         safe_name = _safe_json_file_name(token_file_name, prefix=f"token_{page_instance_id}")
         token_path = os.path.join(_token_dir(), safe_name)
-        params = _parse_json_object(instance.operation_json)
+        params = _apply_value_marks(_parse_json_object(instance.operation_json), instance.exec_count)
         execute_config = await _get_playwright_execute_config(db)
         runner = PlaywrightSplice(
             headless=execute_config["headless"],
@@ -679,6 +699,7 @@ async def execute_page_by_element_templates(
     page_id: int,
     instance_ids: list[int],
     db: Session,
+    token_id: int | None = None,
     request_id: str | None = None,
 ):
     try:
@@ -716,10 +737,6 @@ async def execute_page_by_element_templates(
         if not instances:
             return error_response(msg="execute template failed", data={"error": "page instances not found"})
 
-        token_json_path = await _get_token_json_path_by_token_id(db, page_info.token_id)
-        if token_json_path and not os.path.exists(token_json_path):
-            token_json_path = None
-
         result_rows = []
         shot_dir = _screenshot_dir()
         execute_config = await _get_playwright_execute_config(db)
@@ -729,7 +746,11 @@ async def execute_page_by_element_templates(
             browser_timeout=execute_config["browser_timeout"],
         )
         for instance in instances:
-            params = _parse_json_object(instance.operation_json)
+            selected_token_id = token_id or getattr(instance, "token_id", None) or page_info.token_id
+            token_json_path = await _get_token_json_path_by_token_id(db, selected_token_id)
+            if token_json_path and not os.path.exists(token_json_path):
+                token_json_path = None
+            params = _apply_value_marks(_parse_json_object(instance.operation_json), instance.exec_count)
             response_info = ""
             code = "error"
             success = False

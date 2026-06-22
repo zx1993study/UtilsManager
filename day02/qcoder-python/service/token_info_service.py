@@ -8,6 +8,7 @@ from mysql.token_info_sql import (
     get_token_info_by_id,
     get_token_info_by_unique_fields,
     get_token_info_list,
+    get_token_info_options,
     create_token_info,
     update_token_info,
     delete_token_info,
@@ -81,6 +82,28 @@ async def get_token_info_list_service(db: Session, filter: TokenInfoList):
     )
     
     return success_response(msg="查询成功", data=page_data)
+
+
+async def get_token_info_options_service(
+    db: Session,
+    token_type: int,
+    project_id: int | None = None,
+    name: str | None = None
+):
+    """获取Token下拉框列表，来源必填。"""
+    if token_type not in (1, 2):
+        return error_response(
+            msg="查询失败，来源参数错误",
+            data=None,
+            error='{"errorCode": "INVALID_TOKEN_TYPE", "message": "tokenType只能为1(api)或2(web)"}'
+        )
+    items = await get_token_info_options(
+        db=db,
+        project_id=project_id,
+        token_type=token_type,
+        name=name
+    )
+    return success_response(msg="查询成功", data=items)
 
 
 async def create_token_info_service(db: Session, data: TokenInfoCreate):
@@ -272,7 +295,7 @@ async def refresh_token_service(db: Session, token_id: int):
         
         """7. 拼接token：token类型 + 空格 + 返回的token"""
         token_type = token_info.type
-        """??type??????token????'Bearer'?"""
+        """根据type映射token前缀，未知类型默认使用Bearer"""
         token_map = {
             1: "Bearer",    
             2: "Basic",

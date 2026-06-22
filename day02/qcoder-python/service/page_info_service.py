@@ -14,6 +14,11 @@ from mysql.page_info_sql import (
     update_page_info,
     delete_page_info
 )
+from mysql.page_token_info_sql import (
+    delete_page_token_infos_by_page_ids,
+    get_page_tokens,
+    set_page_token_infos,
+)
 from mysql.page_instance_sql import (
     get_page_instances_by_page_ids,
     delete_page_instance_by_page_ids,
@@ -36,6 +41,50 @@ def _build_real_file_name(file_name: str | None) -> str | None:
     return f"{name}_{timestamp}{ext or '.py'}"
 
 
+def _normalize_token_ids(token_ids):
+    if not token_ids:
+        return []
+    result = []
+    seen = set()
+    for token_id in token_ids:
+        if token_id is None:
+            continue
+        token_id = int(token_id)
+        if token_id in seen:
+            continue
+        seen.add(token_id)
+        result.append(token_id)
+    return result
+
+
+def _build_page_payload(data, exclude_unset: bool = False):
+    payload = data.model_dump(by_alias=False, exclude_unset=exclude_unset)
+    token_ids = payload.pop("token_ids", None)
+    if token_ids is None:
+        token_ids = [payload.get("token_id")] if payload.get("token_id") else []
+    token_ids = _normalize_token_ids(token_ids)
+    payload["token_id"] = token_ids[0] if token_ids else None
+    return payload, token_ids
+
+
+async def _page_info_response(db: Session, obj) -> PageInfoInfo:
+    tokens = await get_page_tokens(db, obj.page_id)
+    if not tokens and obj.token_id:
+        from mysql.token_info_sql import get_token_info_by_id
+
+        token = await get_token_info_by_id(db, obj.token_id)
+        if token:
+            tokens = [token]
+    token_ids = [token.token_id for token in tokens]
+    token_names = [token.name for token in tokens if token.name]
+    data = PageInfoInfo.model_validate(obj)
+    data.token_id = token_ids[0] if token_ids else obj.token_id
+    data.token_ids = token_ids
+    data.token_name = "，".join(token_names)
+    data.token_names = token_names
+    return data
+
+
 async def get_page_info_service(db: Session, item_id: int):
     """获取页面信息详情"""
     obj = await get_page_info_by_id(db, item_id)
@@ -46,8 +95,7 @@ async def get_page_info_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "页面信息不存在"}'
         )
 
-    """将ORM对象转换为Schema对象"""
-    schema_obj = PageInfoInfo.model_validate(obj)
+    schema_obj = await _page_info_response(db, obj)
     return success_response(msg="查询成功", data=schema_obj)
 
 
@@ -55,8 +103,7 @@ async def get_page_info_list_service(db: Session, page_num: int = 1, page_size: 
     """获取页面信息分页列表"""
     items, total = await get_page_info_list(db, page_num, page_size, project_id)
 
-    """将ORM对象转换为Schema对象"""
-    schema_items = [PageInfoInfo.model_validate(item) for item in items]
+    schema_items = [await _page_info_response(db, item) for item in items]
 
     """构建分页响应"""
     page_data = create_page_response(
@@ -86,14 +133,14 @@ async def create_page_info_service(db: Session, data: PageInfoCreate):
             error=f'{{"errorCode": "DUPLICATE_PAGE", "message": "项目ID为{data.project_id}的页面中，已存在名称为\'{data.page_name}\'的页面"}}'
         )
 
-    data_dict = data.model_dump(by_alias=False)
+    data_dict, token_ids = _build_page_payload(data)
     """真实文件名称 = 当前时间戳 + "_" + 文件名称"""
     data_dict["real_file_name"] = _build_real_file_name(data.file_name)
 
     obj = await create_page_info(db, data_dict)
+    await set_page_token_infos(db, obj.page_id, token_ids)
 
-    """将ORM对象转换为Schema对象"""
-    schema_obj = PageInfoInfo.model_validate(obj)
+    schema_obj = await _page_info_response(db, obj)
     return success_response(msg="添加成功", data=schema_obj)
 
 
@@ -108,14 +155,15 @@ async def update_page_info_service(db: Session, data: PageInfoUpdate):
             error='{"errorCode": "NOT_FOUND", "message": "页面信息不存在"}'
         )
 
-    data_dict = data.model_dump(by_alias=False, exclude_unset=True)
+    data_dict, token_ids = _build_page_payload(data, exclude_unset=True)
     """仅在本次更新带了文件名时，才刷新真实文件名称"""
     if data.file_name:
         data_dict["real_file_name"] = _build_real_file_name(data.file_name)
 
     obj = await update_page_info(db, data.page_id, data_dict)
+    await set_page_token_infos(db, data.page_id, token_ids)
 
-    schema_obj = PageInfoInfo.model_validate(obj)
+    schema_obj = await _page_info_response(db, obj)
     return success_response(msg="更新成功", data=schema_obj)
 
 async def delete_page_info_batch_service(db: Session, ids: list[int]):
@@ -146,6 +194,7 @@ async def delete_page_related_data(db: Session, ids: list[int]):
     await delete_page_result_by_instance_ids(db, instance_ids)
     await delete_page_instance_by_page_ids(db, ids)
     await delete_element_templates_by_page_ids(db, ids)
+    await delete_page_token_infos_by_page_ids(db, ids)
 
 
 async def delete_page_playwright_files(db: Session, ids: list[int]):

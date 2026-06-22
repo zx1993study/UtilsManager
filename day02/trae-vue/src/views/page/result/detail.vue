@@ -36,20 +36,6 @@
     </el-card>
 
     <el-card shadow="never" class="detail-card">
-      <template #header>操作步骤</template>
-      <el-empty v-if="operationSteps.length === 0" description="暂无操作步骤" />
-      <el-timeline v-else>
-        <el-timeline-item
-          v-for="(step, index) in operationSteps"
-          :key="`${index}-${step}`"
-          :timestamp="`步骤 ${index + 1}`"
-        >
-          <span class="break-text">{{ step }}</span>
-        </el-timeline-item>
-      </el-timeline>
-    </el-card>
-
-    <el-card shadow="never" class="detail-card">
       <template #header>响应信息</template>
       <pre class="code-block">{{ detail.responseInfo || '-' }}</pre>
     </el-card>
@@ -113,7 +99,8 @@ const buildScreenshotUrl = (path) => {
   if (/^https?:\/\//i.test(path)) return path
   const cleanPath = String(path).replace(/\\/g, '/')
   const fileName = cleanPath.split('/').filter(Boolean).pop()
-  return fileName ? `/static/screenshots/${fileName}` : cleanPath
+  const base = import.meta.env.VITE_API_BASE_URL || '/api'
+  return fileName ? `${base}/static/screenshots/${encodeURIComponent(fileName)}` : cleanPath
 }
 
 const screenshots = computed(() => {
@@ -124,14 +111,6 @@ const screenshots = computed(() => {
 })
 
 const previewList = computed(() => screenshots.value.map(item => item.url))
-
-const operationSteps = computed(() => {
-  const text = detail.value.responseInfo || ''
-  return text
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => /^\[\d+\/\d+\]/.test(line) || line.includes('执行步骤') || line.includes('操作步骤'))
-})
 
 const formatJson = (value) => {
   if (!value) return '-'

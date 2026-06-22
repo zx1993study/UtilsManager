@@ -14,6 +14,8 @@ from mysql.page_instance_sql import (
     delete_page_instance_batch
 )
 from mysql.page_result_sql import delete_page_result_by_instance_ids
+from models.page_result_model import PageResult
+from service.page_result_service import delete_result_screenshot_files
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
 
@@ -61,9 +63,10 @@ async def create_page_instance_service(db: Session, data: PageInstanceCreate):
     )
     
     if existing:
+        schema_existing = PageInstanceInfo.model_validate(existing).model_dump(by_alias=True)
         return error_response(
             msg="添加失败，该实例已存在",
-            data=existing,
+            data=schema_existing,
             error=f'{{"errorCode": "DUPLICATE_INSTANCE", "message": "页面ID为{data.page_id}的实例中，已存在名称为\'{data.instance_name}\'的页面实例"}}'
         )
     
@@ -102,12 +105,22 @@ async def delete_page_instance_service(db: Session, item_id: int):
             error='{"errorCode": "NOT_FOUND", "message": "页面实例不存在"}'
         )
     
+    screenshot_values = [
+        row.screenshot_path
+        for row in db.query(PageResult.screenshot_path)
+        .filter(PageResult.page_instance_id == item_id)
+        .all()
+        if row.screenshot_path
+    ]
     await delete_page_result_by_instance_ids(db, [item_id])
+    deleted_screenshots = []
+    for value in screenshot_values:
+        deleted_screenshots.extend(delete_result_screenshot_files(value))
     obj = await delete_page_instance(db, item_id)
 
     return success_response(
         msg="删除成功",
-        data={"id": item_id, "message": "页面实例已删除"}
+        data={"id": item_id, "message": "页面实例已删除", "deleted_screenshots": deleted_screenshots}
     )
 
 
@@ -120,7 +133,17 @@ async def delete_page_instance_batch_service(db: Session, ids: list[int]):
             error='{"errorCode": "INVALID_PARAM", "message": "ids为空"}'
         )
     """手动级联：先删子表 page_result，再删实例"""
+    screenshot_values = [
+        row.screenshot_path
+        for row in db.query(PageResult.screenshot_path)
+        .filter(PageResult.page_instance_id.in_(ids))
+        .all()
+        if row.screenshot_path
+    ]
     await delete_page_result_by_instance_ids(db, ids)
+    deleted_screenshots = []
+    for value in screenshot_values:
+        deleted_screenshots.extend(delete_result_screenshot_files(value))
     count = await delete_page_instance_batch(db, ids)
     if not count:
         return error_response(
@@ -128,4 +151,7 @@ async def delete_page_instance_batch_service(db: Session, ids: list[int]):
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "页面实例不存在"}'
         )
-    return success_response(msg="删除成功", data={"ids": ids, "message": "页面实例已删除"})
+    return success_response(
+        msg="删除成功",
+        data={"ids": ids, "message": "页面实例已删除", "deleted_screenshots": deleted_screenshots},
+    )

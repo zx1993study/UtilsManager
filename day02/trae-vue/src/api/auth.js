@@ -22,10 +22,11 @@ export function logout() {
 }
 
 // 获取用户信息
-export function getUserInfo() {
+export function getUserInfo(config = {}) {
   return request({
     url: '/api/v1/auth/info',
-    method: 'get'
+    method: 'get',
+    ...config
   })
 }
 

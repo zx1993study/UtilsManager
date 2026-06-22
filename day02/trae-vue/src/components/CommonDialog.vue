@@ -108,6 +108,28 @@ defineExpose({
 <style scoped>
 .common-form {
   padding: 20px;
+  min-width: 0;
+}
+
+.common-form :deep(.el-form-item__content) {
+  min-width: 0;
+}
+
+.common-form :deep(.el-input),
+.common-form :deep(.el-select),
+.common-form :deep(.el-textarea),
+.common-form :deep(.el-input-number) {
+  max-width: 100%;
+}
+
+:deep(.el-dialog) {
+  max-width: calc(100vw - 32px);
+}
+
+:deep(.el-dialog__body) {
+  max-height: calc(100vh - 180px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .dialog-footer {

@@ -36,7 +36,7 @@ async def get_api_result_by_id(db: Session, result_id: int) -> Optional[ApiResul
             ).join(
                 ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
             ).outerjoin(
-                TokenInfo, ApiInfo.token_id == TokenInfo.token_id
+                TokenInfo, TokenInfo.token_id == func.coalesce(ApiInstance.token_id, ApiInfo.token_id)
             ).filter(ApiResult.result_id == result_id).first()
     if not item:
         return None
@@ -75,7 +75,7 @@ async def get_api_result_total(
     ApiResultList: ApiResultList
 ) -> Optional[ApiResult]:
     """获取API结果总数"""
-    """???????"""
+    """按查询条件统计API执行结果数量"""
     count_stmt = select(func.count(ApiResult.result_id)).select_from(ApiResult)\
         .join(ApiInstance, ApiResult.instance_id == ApiInstance.instance_id)\
         .join(ApiInfo, ApiInstance.api_id == ApiInfo.api_id)\
@@ -113,7 +113,7 @@ async def get_api_result_list(
         .join(ApiInstance, ApiResult.instance_id == ApiInstance.instance_id)
         .join(ApiInfo, ApiInstance.api_id == ApiInfo.api_id)
         .join(ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id)
-        .outerjoin(TokenInfo, ApiInfo.token_id == TokenInfo.token_id)
+        .outerjoin(TokenInfo, TokenInfo.token_id == func.coalesce(ApiInstance.token_id, ApiInfo.token_id))
         .filter(*ApiResultList.filter_params())
         .order_by(ApiResult.result_id.desc())
         .offset(offset)
@@ -236,7 +236,7 @@ async def get_latest_result_by_api_id(db: Session, api_id: int) -> Optional[dict
             ).join(
                 ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
             ).outerjoin(
-                TokenInfo, ApiInfo.token_id == TokenInfo.token_id
+                TokenInfo, TokenInfo.token_id == func.coalesce(ApiInstance.token_id, ApiInfo.token_id)
             ).filter(ApiInfo.api_id == api_id).order_by(ApiResult.result_id.desc()).first()
     
     if not item:
@@ -274,7 +274,7 @@ async def get_latest_result_by_instance_id(db: Session, instance_id: int) -> Opt
             ).join(
                 ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
             ).outerjoin(
-                TokenInfo, ApiInfo.token_id == TokenInfo.token_id
+                TokenInfo, TokenInfo.token_id == func.coalesce(ApiInstance.token_id, ApiInfo.token_id)
             ).filter(ApiResult.instance_id == instance_id).order_by(ApiResult.result_id.desc()).first()
     
     if not item:

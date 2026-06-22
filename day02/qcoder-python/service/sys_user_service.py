@@ -82,7 +82,7 @@ async def update_sys_user_service(db: Session, item_id: int, data: SysUserUpdate
             data=None,
             error='{"errorCode": "NOT_FOUND", "message": "系统用户不存在"}'
         )
-    """????????????????username?"""
+    """校验更新后的用户名是否已被其他用户使用"""
     existing = await get_sys_user_by_username(
         db, 
         username=data.username

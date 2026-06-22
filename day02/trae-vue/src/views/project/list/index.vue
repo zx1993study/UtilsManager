@@ -7,6 +7,8 @@
       :pagination="pagination"
       :search-fields="searchFields"
       :show-selection="true"
+      :show-row-edit="false"
+      :show-row-delete="false"
       row-key="projectId"
       @add="handleAdd"
       @edit="handleEdit"
@@ -24,6 +26,24 @@
           <el-icon><Document /></el-icon>
           <span>解析Swagger</span>
         </el-button>
+        <el-dropdown trigger="click" @command="command => handleMoreCommand(command, row)">
+          <el-button type="primary" size="small" link>
+            <span>更多</span>
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="edit">
+                <el-icon><Edit /></el-icon>
+                <span>编辑</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="delete">
+                <el-icon><Delete /></el-icon>
+                <span>删除</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </template>
     </common-table>
 
@@ -65,7 +85,7 @@ import { ref, reactive } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document } from '@element-plus/icons-vue'
+import { ArrowDown, Document, Edit, Delete } from '@element-plus/icons-vue'
 import { handleApiResponse } from '@/utils/responseHandler'
 import * as projectApi from '@/api/project/project'
 
@@ -182,6 +202,14 @@ const handleParseSwagger = (row) => {
       ElMessage.error('Swagger解析失败')
     }
   }).catch(() => {})
+}
+
+const handleMoreCommand = (command, row) => {
+  const actions = {
+    edit: handleEdit,
+    delete: handleDelete
+  }
+  actions[command]?.(row)
 }
 
 const handleSubmit = async () => {

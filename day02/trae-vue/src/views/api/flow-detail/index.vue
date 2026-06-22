@@ -317,8 +317,8 @@ const loadSteps = async () => {
 // 加载API列表
 const loadApiList = async () => {
   try {
-    const res = await apiApi.getApiList({ pageNum: 1, pageSize: 1000 })
-    apiList.value = res.data?.items || res.data?.list || []
+    const res = await apiApi.getApiOptions()
+    apiList.value = res.data?.items || res.data?.list || res.data || []
   } catch (error) {
     console.error('加载API列表失败:', error)
   }

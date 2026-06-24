@@ -94,6 +94,24 @@
                 </el-select>
               </el-form-item>
 
+              <el-form-item label="Token">
+                <el-select filterable
+                  v-model="step.tokenId"
+                  placeholder="请选择Token"
+                  style="width: 250px"
+                  clearable
+                  :disabled="!step.apiId || !canEditStep(step)"
+                  @change="handleStepTokenChange(index)"
+                >
+                  <el-option
+                    v-for="token in getTokenOptions(index)"
+                    :key="token.tokenId"
+                    :label="token.name"
+                    :value="token.tokenId"
+                  />
+                </el-select>
+              </el-form-item>
+
               <el-form-item>
                 <el-button
                   type="primary"
@@ -219,6 +237,23 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="Token" prop="tokenId">
+        <el-select filterable
+          v-model="addStepFormData.tokenId"
+          placeholder="请选择Token"
+          style="width: 100%"
+          clearable
+          :disabled="!addStepFormData.apiId"
+        >
+          <el-option
+            v-for="token in addStepTokenOptions"
+            :key="token.tokenId"
+            :label="token.name"
+            :value="token.tokenId"
+          />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="实例参数" prop="params">
         <el-input
           v-model="addStepFormData.params"
@@ -261,6 +296,7 @@ const apiList = ref([])
 
 // 每个步骤的实例选项缓存
 const instanceOptionsCache = ref({})
+const tokenOptionsCache = ref({})
 
 // 运行流程加载状态
 const runFlowLoading = ref(false)
@@ -271,9 +307,11 @@ const addStepLoading = ref(false)
 const addStepFormData = reactive({
   apiId: null,
   instanceId: null,
+  tokenId: null,
   params: ''
 })
 const addStepInstanceOptions = ref([])
+const addStepTokenOptions = ref([])
 
 // 表单验证规则
 const addStepRules = {
@@ -319,9 +357,52 @@ const loadApiList = async () => {
   try {
     const res = await apiApi.getApiOptions()
     apiList.value = res.data?.items || res.data?.list || res.data || []
+    apiList.value.forEach(api => {
+      tokenOptionsCache.value[api.apiId] = buildTokenOptionsFromApi(api)
+    })
   } catch (error) {
     console.error('加载API列表失败:', error)
   }
+}
+
+const buildTokenOptionsFromApi = (api = {}) => {
+  const ids = Array.isArray(api.tokenIds) ? api.tokenIds : (api.tokenId ? [api.tokenId] : [])
+  const names = Array.isArray(api.tokenNames) ? api.tokenNames : []
+  return ids.filter(Boolean).map((tokenId, index) => ({
+    tokenId,
+    name: names[index] || (index === 0 ? api.tokenName : `Token ${tokenId}`)
+  }))
+}
+
+const loadTokenOptionsForApi = async (apiId) => {
+  if (!apiId) return []
+  if (tokenOptionsCache.value[apiId]) {
+    return tokenOptionsCache.value[apiId]
+  }
+  try {
+    const api = apiList.value.find(item => item.apiId === apiId)
+    if (api) {
+      tokenOptionsCache.value[apiId] = buildTokenOptionsFromApi(api)
+      return tokenOptionsCache.value[apiId]
+    }
+    const res = await apiApi.getApiDetail(apiId)
+    tokenOptionsCache.value[apiId] = buildTokenOptionsFromApi(res.data || {})
+    return tokenOptionsCache.value[apiId]
+  } catch (error) {
+    console.error('加载Token列表失败:', error)
+    tokenOptionsCache.value[apiId] = []
+    return []
+  }
+}
+
+const getDefaultTokenId = (apiId) => {
+  return tokenOptionsCache.value[apiId]?.[0]?.tokenId || null
+}
+
+const getTokenOptions = (index) => {
+  const step = steps.value[index]
+  if (!step?.apiId) return []
+  return tokenOptionsCache.value[step.apiId] || []
 }
 
 // 获取指定步骤的实例选项
@@ -341,7 +422,10 @@ const getInstanceOptions = (index) => {
 // 否则二次进入页面时缓存为空，实例下拉框会显示原始 instanceId 且没有可选项
 const preloadStepInstances = async () => {
   const apiIds = [...new Set(steps.value.map(step => step.apiId).filter(Boolean))]
-  await Promise.all(apiIds.map(apiId => loadInstancesForApi(apiId)))
+  await Promise.all(apiIds.map(apiId => Promise.all([
+    loadInstancesForApi(apiId),
+    loadTokenOptionsForApi(apiId)
+  ])))
 
   // 用所选实例的 instanceJson 回填各步骤的「实例参数」并美化展示
   steps.value.forEach(step => {
@@ -350,6 +434,7 @@ const preloadStepInstances = async () => {
     const instance = options.find(item => item.instanceId === step.instanceId)
     if (instance) {
       step.params = formatInstanceJson(instance.instanceJson)
+      step.tokenId = step.tokenId || instance.tokenId || getDefaultTokenId(step.apiId)
     }
   })
 }
@@ -375,11 +460,17 @@ const loadInstancesForApi = async (apiId) => {
 const handleApiChange = async (index) => {
   const step = steps.value[index]
   step.instanceId = null
+  step.tokenId = null
   step.params = ''
 
   if (step.apiId) {
-    await loadInstancesForApi(step.apiId)
+    await Promise.all([
+      loadInstancesForApi(step.apiId),
+      loadTokenOptionsForApi(step.apiId)
+    ])
+    step.tokenId = getDefaultTokenId(step.apiId)
   }
+  await saveStepToken(step)
 }
 
 // 实例改变事件：用所选实例的 instanceJson 填充实例参数
@@ -388,6 +479,30 @@ const handleInstanceChange = (index) => {
   const options = getInstanceOptions(index)
   const instance = options.find(item => item.instanceId === step.instanceId)
   step.params = instance ? formatInstanceJson(instance.instanceJson) : ''
+  step.tokenId = instance?.tokenId || step.tokenId || getDefaultTokenId(step.apiId)
+  saveStepToken(step)
+}
+
+const saveStepToken = async (step) => {
+  if (!step?.stepId) return
+  try {
+    await flowStepApi.updateFlowStep({
+      stepId: step.stepId,
+      flowId: step.flowId,
+      apiId: step.apiId,
+      instanceId: step.instanceId,
+      tokenId: step.tokenId || null,
+      params: step.params,
+      flowType: step.flowType || 1
+    })
+  } catch (error) {
+    console.error('保存步骤Token失败:', error)
+    ElMessage.error('保存步骤Token失败')
+  }
+}
+
+const handleStepTokenChange = async (index) => {
+  await saveStepToken(steps.value[index])
 }
 
 // 判断步骤是否可编辑
@@ -551,7 +666,7 @@ const handleRunStep = async (index) => {
   
   try {
     // 执行API
-    await apiResultApi.executeApi(step.instanceId)
+    await apiResultApi.executeApi(step.instanceId, step.tokenId || null)
     
     // 获取最新结果
     const res = await apiResultApi.getLatestResultByInstanceId(step.instanceId)
@@ -616,22 +731,31 @@ const handleAddStep = () => {
   Object.assign(addStepFormData, {
     apiId: null,
     instanceId: null,
+    tokenId: null,
     params: ''
   })
   addStepInstanceOptions.value = []
+  addStepTokenOptions.value = []
   addStepDialogVisible.value = true
 }
 
 // 添加步骤弹窗中API改变
 const handleAddStepApiChange = async (apiId) => {
   addStepFormData.instanceId = null
+  addStepFormData.tokenId = null
   addStepFormData.params = ''
 
   if (apiId) {
-    const instances = await loadInstancesForApi(apiId)
+    const [instances, tokens] = await Promise.all([
+      loadInstancesForApi(apiId),
+      loadTokenOptionsForApi(apiId)
+    ])
     addStepInstanceOptions.value = instances
+    addStepTokenOptions.value = tokens
+    addStepFormData.tokenId = tokens[0]?.tokenId || null
   } else {
     addStepInstanceOptions.value = []
+    addStepTokenOptions.value = []
   }
 }
 
@@ -639,6 +763,7 @@ const handleAddStepApiChange = async (apiId) => {
 const handleAddStepInstanceChange = (instanceId) => {
   const instance = addStepInstanceOptions.value.find(item => item.instanceId === instanceId)
   addStepFormData.params = instance ? formatInstanceJson(instance.instanceJson) : ''
+  addStepFormData.tokenId = instance?.tokenId || addStepFormData.tokenId || addStepTokenOptions.value[0]?.tokenId || null
 }
 
 // 提交添加步骤
@@ -650,6 +775,7 @@ const handleAddStepSubmit = async () => {
       flowId: flowId.value,
       apiId: addStepFormData.apiId,
       instanceId: addStepFormData.instanceId,
+      tokenId: addStepFormData.tokenId,
       params: addStepFormData.params,
       flowType: 1
     }

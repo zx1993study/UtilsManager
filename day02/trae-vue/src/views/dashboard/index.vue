@@ -138,9 +138,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import * as echarts from 'echarts'
+import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { User, Folder, Connection, Document, Monitor, Share } from '@element-plus/icons-vue'
+
+const echartsRef = shallowRef(null)
+const chartInstances = []
+let resizeHandler = null
 
 const stats = ref({
   userCount: 128,
@@ -159,16 +162,38 @@ const activities = ref([
 const apiChartRef = ref(null)
 const testChartRef = ref(null)
 
+const initCharts = async () => {
+  await nextTick()
+  const echarts = echartsRef.value || await import('echarts')
+  echartsRef.value = echarts
+  initApiChart(echarts)
+  initTestChart(echarts)
+  resizeHandler = () => chartInstances.forEach(chart => chart.resize())
+  window.addEventListener('resize', resizeHandler)
+}
+
 // 初始化图表
 onMounted(() => {
-  initApiChart()
-  initTestChart()
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(initCharts, { timeout: 1200 })
+  } else {
+    setTimeout(initCharts, 0)
+  }
 })
 
-const initApiChart = () => {
+onBeforeUnmount(() => {
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+  }
+  chartInstances.forEach(chart => chart.dispose())
+  chartInstances.length = 0
+})
+
+const initApiChart = (echarts) => {
   if (!apiChartRef.value) return
   
   const chart = echarts.init(apiChartRef.value)
+  chartInstances.push(chart)
   const option = {
     tooltip: {
       trigger: 'axis'
@@ -209,15 +234,13 @@ const initApiChart = () => {
   }
   chart.setOption(option)
   
-  window.addEventListener('resize', () => {
-    chart.resize()
-  })
 }
 
-const initTestChart = () => {
+const initTestChart = (echarts) => {
   if (!testChartRef.value) return
   
   const chart = echarts.init(testChartRef.value)
+  chartInstances.push(chart)
   const option = {
     tooltip: {
       trigger: 'item'
@@ -247,9 +270,6 @@ const initTestChart = () => {
   }
   chart.setOption(option)
   
-  window.addEventListener('resize', () => {
-    chart.resize()
-  })
 }
 </script>
 

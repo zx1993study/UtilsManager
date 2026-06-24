@@ -8,8 +8,10 @@ from . import (
     api_template,
     app,
     auth,
+    case_generate,
     dict_info,
     element_template,
+    exception_case_type,
     flow_info,
     flow_result,
     flow_step,
@@ -27,9 +29,11 @@ from . import (
 api_router = APIRouter()
 
 api_router.include_router(auth.router, prefix="/api/v1", tags=["认证"])
+api_router.include_router(case_generate.router, prefix="/api/v1", tags=["自动生成用例"])
 api_router.include_router(sys_user.router, prefix="/api/v1", tags=["系统用户"])
 api_router.include_router(project_info.router, prefix="/api/v1", tags=["项目管理"])
 api_router.include_router(dict_info.router, prefix="/api/v1", tags=["字典管理"])
+api_router.include_router(exception_case_type.router, prefix="/api/v1", tags=["异常用例类型管理"])
 api_router.include_router(api_info.router, prefix="/api/v1", tags=["API信息管理"])
 api_router.include_router(api_instance.router, prefix="/api/v1", tags=["API实例管理"])
 api_router.include_router(api_template.router, prefix="/api/v1", tags=["API模板管理"])

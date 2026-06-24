@@ -201,7 +201,7 @@ const formRules = {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const res = await projectApi.getProjectList({ pageNum: 1, pageSize: 1000 })
+    const res = await projectApi.getProjectSelectOptions()
     projectOptions.value = res.data?.items || res.data?.list || res.data || []
     
     // 更新搜索字段的项目选项

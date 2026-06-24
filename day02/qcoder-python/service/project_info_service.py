@@ -8,6 +8,7 @@ from mysql.project_info_sql import (
     get_project_info_by_id,
     get_project_info_by_unique_fields,
     get_project_info_list,
+    get_project_info_select_options,
     create_project_info,
     update_project_info,
     delete_project_info
@@ -47,6 +48,11 @@ async def get_project_info_list_service(db: Session, page_num: int = 1, page_siz
     )
     
     return success_response(msg="查询成功", data=page_data)
+
+
+async def get_project_info_select_options_service(db: Session):
+    items = await get_project_info_select_options(db)
+    return success_response(msg="查询成功", data=items)
 
 
 async def create_project_info_service(db: Session, data: ProjectInfoCreate):

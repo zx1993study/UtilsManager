@@ -10,6 +10,7 @@ from schemas.project_info_schemas import ProjectInfoCreate, ProjectInfoUpdate, P
 from service.project_info_service import (
     get_project_info_service,
     get_project_info_list_service,
+    get_project_info_select_options_service,
     create_project_info_service,
     update_project_info_service,
     delete_project_info_service
@@ -26,6 +27,12 @@ async def list_project_info(
 ):
     """获取项目信息分页分页列表"""
     return await get_project_info_list_service(db, page_num = pageNum, page_size = pageSize)
+
+
+@router.get("/projectInfo/selectOptions", response_model=dict)
+async def list_project_info_select_options(db: Session = Depends(get_db)):
+    """获取轻量项目下拉框列表，不需要分页参数。"""
+    return await get_project_info_select_options_service(db)
 
 
 @router.get("/projectInfo/{item_id}", response_model=dict)

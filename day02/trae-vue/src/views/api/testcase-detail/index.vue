@@ -115,10 +115,16 @@
             <div class="template-container">
               <div class="template-header">
                 <h3>参数模板列表</h3>
-                <el-button type="primary" size="small" @click="handleAddTemplate">
-                  <el-icon><Plus /></el-icon>
-                  <span>新增</span>
-                </el-button>
+                <div class="template-actions">
+                  <el-button type="warning" size="small" @click="handleOpenTemplateJsonParseDialog">
+                    <el-icon><Document /></el-icon>
+                    <span>JSON解析</span>
+                  </el-button>
+                  <el-button type="primary" size="small" @click="handleAddTemplate">
+                    <el-icon><Plus /></el-icon>
+                    <span>新增</span>
+                  </el-button>
+                </div>
               </div>
               
               <el-table
@@ -135,6 +141,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="fieldSize" label="字段大小" width="100" />
+                <el-table-column prop="defaultValue" label="默认值" min-width="150" show-overflow-tooltip />
                 <el-table-column prop="isRequired" label="是否必填" width="100">
                   <template #default="{ row }">
                     {{ row.isRequired === 'Y' ? '是' : '否' }}
@@ -212,6 +219,10 @@
               <el-icon><Plus /></el-icon>
               <span>新增用例</span>
             </el-button>
+            <el-button type="warning" @click="handleOpenGenerateDialog">
+              <el-icon><Plus /></el-icon>
+              <span>自动生成</span>
+            </el-button>
           </div>
         </div>
 
@@ -222,6 +233,7 @@
           :pagination="pagination"
           :search-fields="[]"
           :show-add="false"
+          :show-edit="false"
           :show-delete="false"
           :show-selection="true"
           :show-toolbar="false"
@@ -259,6 +271,10 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="edit">
+                    <el-icon><Edit /></el-icon>
+                    <span>编辑</span>
+                  </el-dropdown-item>
                   <el-dropdown-item command="copy">
                     <el-icon><DocumentCopy /></el-icon>
                     <span>复制</span>
@@ -312,6 +328,31 @@
         <el-input v-model="formData.remark" type="textarea" placeholder="请输入备注" />
       </el-form-item>
 
+      <el-form-item label="标记字段" prop="markFields">
+        <el-select
+          v-model="formData.markFields"
+          multiple
+          clearable
+          filterable
+          placeholder="请选择需要追加执行次数的字段"
+          style="width: 100%"
+          @change="handleMainMarkChange"
+        >
+          <el-option
+            v-for="item in templateFieldOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="执行次数" prop="batchCount">
+        <el-select v-model="formData.batchCount" placeholder="请选择执行次数" style="width: 100%" @change="handleMainBatchCountChange">
+          <el-option v-for="item in batchCountOptions" :key="item" :label="`${item}次`" :value="item" />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="用例输入" prop="instanceJson">
         <el-input
           v-model="formData.instanceJson" 
@@ -359,6 +400,31 @@
         <el-input v-model="copyFormData.remark" type="textarea" placeholder="请输入备注" />
       </el-form-item>
 
+      <el-form-item label="标记字段" prop="markFields">
+        <el-select
+          v-model="copyFormData.markFields"
+          multiple
+          clearable
+          filterable
+          placeholder="请选择需要追加执行次数的字段"
+          style="width: 100%"
+          @change="handleCopyMarkChange"
+        >
+          <el-option
+            v-for="item in templateFieldOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="执行次数" prop="batchCount">
+        <el-select v-model="copyFormData.batchCount" placeholder="请选择执行次数" style="width: 100%" @change="handleCopyBatchCountChange">
+          <el-option v-for="item in batchCountOptions" :key="item" :label="`${item}次`" :value="item" />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="用例输入" prop="instanceJson">
         <el-input 
           v-model="copyFormData.instanceJson" 
@@ -397,6 +463,15 @@
         <el-input v-model="templateFormData.fieldSize" placeholder="请输入字段大小" type="number" />
       </el-form-item>
 
+      <el-form-item label="默认值" prop="defaultValue">
+        <el-input
+          v-model="templateFormData.defaultValue"
+          type="textarea"
+          :rows="3"
+          placeholder="请输入默认值"
+        />
+      </el-form-item>
+
       <el-form-item label="是否必填" prop="isRequired">
         <el-radio-group v-model="templateFormData.isRequired">
           <el-radio label="Y">是</el-radio>
@@ -412,20 +487,174 @@
           placeholder="请输入内容" />
       </el-form-item>
     </common-dialog>
+
+    <common-dialog
+      v-model="templateJsonParseDialogVisible"
+      title="JSON解析"
+      :form-data="templateJsonParseForm"
+      :rules="templateJsonParseRules"
+      :loading="templateJsonParseLoading"
+      width="760px"
+      @confirm="handleTemplateJsonParseSubmit"
+    >
+      <el-form-item label="JSON" prop="jsonText">
+        <el-input
+          v-model="templateJsonParseForm.jsonText"
+          type="textarea"
+          :rows="12"
+          placeholder="请输入JSON内容"
+        />
+      </el-form-item>
+    </common-dialog>
+
+    <common-dialog
+      v-model="generateDialogVisible"
+      title="自动生成API用例"
+      :form-data="generateForm"
+      :loading="generateSaving"
+      width="900px"
+      @confirm="handleSaveGeneratedCases"
+    >
+      <el-form-item label="识别类型">
+        <el-select
+          v-model="generateForm.operationType"
+          clearable
+          placeholder="自动识别"
+          style="width: 180px"
+          @change="clearGeneratePreview"
+        >
+          <el-option v-for="item in operationTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-checkbox v-model="generateForm.overwrite" class="generate-overwrite">覆盖同名用例</el-checkbox>
+        <el-button type="primary" :loading="generateLoading" @click="handlePreviewGeneratedCases">
+          预览生成
+        </el-button>
+      </el-form-item>
+      <el-form-item label="字段名称">
+        <el-select
+          v-model="generateForm.templateIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          filterable
+          clearable
+          placeholder="默认全部字段"
+          style="width: 100%"
+          @change="clearGeneratePreview"
+        >
+          <el-option
+            v-for="item in generateFieldOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          >
+            <span>{{ item.label }}</span>
+            <span class="generate-option-extra">{{ item.typeLabel }}</span>
+          </el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="异常类型">
+        <el-select
+          v-model="generateForm.exceptionIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          filterable
+          clearable
+          placeholder="默认按识别类型匹配"
+          style="width: 100%"
+          @change="clearGeneratePreview"
+        >
+          <el-option
+            v-for="item in exceptionCaseOptions"
+            :key="item.exceptionId"
+            :label="buildExceptionLabel(item)"
+            :value="item.exceptionId"
+          />
+        </el-select>
+      </el-form-item>
+      <el-alert
+        v-if="generatePreview"
+        :title="`识别结果：${generatePreview.operationTypeName}，共 ${generatePreview.total} 条，已存在 ${generatePreview.existsCount} 条`"
+        type="info"
+        show-icon
+        :closable="false"
+      />
+      <div class="generate-preview-toolbar">
+        <el-button type="primary" size="small" @click="handleAddGeneratedCase">
+          <el-icon><Plus /></el-icon>
+          <span>新增</span>
+        </el-button>
+      </div>
+      <el-table :data="generatePreviewItems" border stripe max-height="420" class="generate-preview-table">
+        <el-table-column prop="caseName" label="用例名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="targetId" label="API ID" width="80" />
+        <el-table-column prop="templateId" label="字段ID" width="80" />
+        <el-table-column prop="templateName" label="字段" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="exceptionId" label="异常ID" width="80" />
+        <el-table-column prop="exceptionName" label="异常类型" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="operationTypeName" label="操作类型" width="100" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.exists ? 'warning' : 'success'">{{ row.exists ? '已存在' : '新增' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="参数JSON" min-width="220">
+          <template #default="{ row }">
+            <pre class="json-mini">{{ formatJson(row.payload) }}</pre>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row, $index }">
+            <el-button type="primary" size="small" link @click="handleEditGeneratedCase(row, $index)">编辑</el-button>
+            <el-button type="danger" size="small" link @click="handleDeleteGeneratedCase($index)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </common-dialog>
+
+    <common-dialog
+      v-model="generatedCaseDialogVisible"
+      :title="generatedCaseDialogTitle"
+      :form-data="generatedCaseForm"
+      :rules="generatedCaseRules"
+      width="760px"
+      @confirm="handleGeneratedCaseSubmit"
+    >
+      <el-form-item label="用例名称" prop="caseName">
+        <el-input v-model="generatedCaseForm.caseName" maxlength="50" show-word-limit placeholder="请输入用例名称" />
+      </el-form-item>
+      <el-form-item label="字段名称" prop="templateName">
+        <el-input v-model="generatedCaseForm.templateName" placeholder="请输入字段名称" />
+      </el-form-item>
+      <el-form-item label="异常类型" prop="exceptionName">
+        <el-input v-model="generatedCaseForm.exceptionName" placeholder="请输入异常类型名称" />
+      </el-form-item>
+      <el-form-item label="操作类型" prop="operationType">
+        <el-select v-model="generatedCaseForm.operationType" placeholder="请选择操作类型" style="width: 100%" @change="handleGeneratedCaseOperationChange">
+          <el-option v-for="item in operationTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="参数JSON" prop="payloadText">
+        <el-input v-model="generatedCaseForm.payloadText" type="textarea" :rows="10" placeholder="请输入参数JSON" />
+      </el-form-item>
+    </common-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, nextTick, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, VideoPlay, Plus, Delete, Search, DocumentCopy } from '@element-plus/icons-vue'
+import { ArrowDown, VideoPlay, Plus, Delete, Search, DocumentCopy, Document, Edit } from '@element-plus/icons-vue'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as apiApi from '@/api/api/api'
 import * as apiTemplateApi from '@/api/api/api-template'
 import * as apiResultApi from '@/api/api/api-result'
+import * as caseGenerateApi from '@/api/case-generate'
+import * as exceptionCaseTypeApi from '@/api/system/exception-case-type'
 import { handleApiResponse } from '@/utils/responseHandler'
 
 const route = useRoute()
@@ -438,6 +667,46 @@ const queryKey = ref('')
 const queryResult = ref('')
 const tokenOptions = ref([])
 const runningInstanceIds = ref([])
+const generateDialogVisible = ref(false)
+const generateLoading = ref(false)
+const generateSaving = ref(false)
+const generatePreview = ref(null)
+const generatePreviewItems = ref([])
+const exceptionCaseOptions = ref([])
+const generatedCaseDialogVisible = ref(false)
+const generatedCaseDialogTitle = ref('')
+const generatedCaseEditIndex = ref(-1)
+const generateForm = reactive({
+  operationType: null,
+  templateIds: [],
+  exceptionIds: [],
+  overwrite: false
+})
+const operationTypeOptions = [
+  { label: '添加', value: 1 },
+  { label: '编辑', value: 2 },
+  { label: '删除', value: 3 },
+  { label: '登录', value: 4 },
+  { label: '搜索', value: 5 }
+]
+
+const generatedCaseForm = reactive({
+  caseName: '',
+  targetId: null,
+  templateId: null,
+  templateName: '',
+  exceptionId: null,
+  exceptionName: '',
+  operationType: null,
+  operationTypeName: '',
+  payloadText: '',
+  exists: false
+})
+
+const generatedCaseRules = {
+  caseName: [{ required: true, message: '请输入用例名称', trigger: 'blur' }],
+  payloadText: [{ required: true, message: '请输入参数JSON', trigger: 'blur' }]
+}
 
 // 选项卡激活状态
 const activeTab = ref('result')
@@ -462,20 +731,52 @@ const templateList = ref([])
 const templateDialogVisible = ref(false)
 const templateDialogTitle = ref('')
 const templateSubmitLoading = ref(false)
+const templateJsonParseDialogVisible = ref(false)
+const templateJsonParseLoading = ref(false)
 const templateFormData = reactive({
   templateId: null,
   fieldName: '',
   fieldType: null,
   fieldSize: null,
+  defaultValue: '',
   isRequired: 'N',
   remark: '',
   projectId: null,
   apiId: null
 })
 
+const templateJsonParseForm = reactive({
+  jsonText: ''
+})
+
+const templateFieldOptions = computed(() => {
+  return (templateList.value || [])
+    .filter(item => item.fieldName)
+    .map(item => ({
+      label: item.fieldName,
+      value: item.fieldName
+    }))
+})
+
+const generateFieldOptions = computed(() => {
+  return (templateList.value || [])
+    .filter(item => item.templateId && item.fieldName)
+    .map(item => ({
+      label: `${item.fieldName}#${item.templateId}`,
+      value: item.templateId,
+      typeLabel: item.fieldType ? `类型 ${item.fieldType}` : ''
+    }))
+})
+
+const batchCountOptions = [1, 2, 3, 5, 10, 20, 50]
+
 const templateFormRules = {
   fieldName: [{ required: true, message: '请输入字段名称', trigger: 'blur' }],
   fieldType: [{ required: true, message: '请选择字段类型', trigger: 'change' }]
+}
+
+const templateJsonParseRules = {
+  jsonText: [{ required: true, message: '请输入JSON内容', trigger: 'blur' }]
 }
 
 // API信息
@@ -541,6 +842,8 @@ const formData = reactive({
   expectResult: '',
   remark: '',
   tokenId: null,
+  markFields: [],
+  batchCount: 1,
   instanceJson: ''
 })
 
@@ -564,7 +867,21 @@ const copyFormData = reactive({
   expectResult: '',
   remark: '',
   tokenId: null,
+  markFields: [],
+  batchCount: 1,
   instanceJson: ''
+})
+
+watch(() => formData.instanceJson, () => {
+  if (dialogVisible.value) {
+    syncControlsFromJson(formData)
+  }
+})
+
+watch(() => copyFormData.instanceJson, () => {
+  if (copyDialogVisible.value) {
+    syncControlsFromJson(copyFormData)
+  }
 })
 
 // 获取方法类型文本
@@ -612,6 +929,13 @@ const handleSelectedTokenChange = (tokenId) => {
   if (selectedTestcase.value) {
     selectedTestcase.value.tokenId = tokenId || null
   }
+}
+
+const getRunTokenId = (row = {}) => {
+  if (selectedTestcase.value?.instanceId === row.instanceId) {
+    return selectedTestcase.value.tokenId || null
+  }
+  return normalizeTestcaseTokenId(row)
 }
 
 // 获取参数类型文本
@@ -850,6 +1174,7 @@ const handleEditTestcase = (row) => {
   dialogTitle.value = '编辑用例'
   Object.assign(formData, row)
   formData.tokenId = normalizeTestcaseTokenId(row)
+  syncControlsFromJson(formData)
   dialogVisible.value = true
 }
 
@@ -870,25 +1195,41 @@ const handleAddTestcase = () => {
     expectResult: '',
     remark: '',
     tokenId: getDefaultTokenId(),
+    markFields: [],
+    batchCount: 1,
     instanceJson: defaultJson
   })
+  syncControlsFromJson(formData)
   dialogVisible.value = true
 }
 
 // 根据参数模板生成默认JSON数据
 const generateDefaultJsonFromTemplate = () => {
-  if (!templateList.value || templateList.value.length === 0) {
-    return ''
+  const jsonObj = {
+    valueMarks: {},
+    batchCount: 1
   }
-  
-  const jsonObj = {}
+  if (!templateList.value || templateList.value.length === 0) {
+    return JSON.stringify(jsonObj, null, 2)
+  }
+
   templateList.value.forEach(template => {
-    // 必填字段：值为字段类型；非必填字段：值为null
-    jsonObj[template.fieldName] = getFieldTypeDefaultValue(template.fieldType)
+    jsonObj[template.fieldName] = getTemplateDefaultValue(template)
     
   })
   
   return JSON.stringify(jsonObj, null, 2)
+}
+
+const getTemplateDefaultValue = (template) => {
+  if (template.defaultValue !== undefined && template.defaultValue !== null && template.defaultValue !== '') {
+    try {
+      return JSON.parse(template.defaultValue)
+    } catch (error) {
+      return template.defaultValue
+    }
+  }
+  return getFieldTypeDefaultValue(template.fieldType)
 }
 
 // 根据字段类型获取默认值
@@ -915,17 +1256,21 @@ const handleRunTestcase = async (row) => {
       type: 'info'
     })
     runningInstanceIds.value.push(row.instanceId)
-    const res = await apiTestcaseApi.executeTestcase(row.instanceId)
+    const tokenId = getRunTokenId(row)
+    const res = await apiTestcaseApi.executeTestcase(row.instanceId, tokenId)
     if (handleApiResponse(res, '运行成功', '运行失败')) {
       const refreshed = await tableRef.value.refresh()
       await loadStatistics()
       selectedInstanceId.value = row.instanceId
       await refreshSelectedTestcase(row.instanceId)
+      if (selectedTestcase.value) {
+        selectedTestcase.value.tokenId = tokenId
+      }
       const latestRow = refreshed?.list?.find(item => item.instanceId === row.instanceId)
       if (latestRow) {
         selectedTestcase.value = {
           ...latestRow,
-          tokenId: normalizeTestcaseTokenId(latestRow)
+          tokenId
         }
       }
       await loadLatestResultByInstanceId(row.instanceId)
@@ -941,6 +1286,254 @@ const handleRunTestcase = async (row) => {
     }
   } finally {
     runningInstanceIds.value = runningInstanceIds.value.filter(id => id !== row.instanceId)
+  }
+}
+
+const parseInstanceJson = (value) => {
+  if (!value) return {}
+  if (typeof value === 'object') return { ...value }
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch (error) {
+    return {}
+  }
+}
+
+const extractCaseJsonControls = (value) => {
+  const jsonObj = parseInstanceJson(value)
+  const valueMarks = jsonObj.valueMarks && typeof jsonObj.valueMarks === 'object' ? jsonObj.valueMarks : {}
+  const markFields = Object.keys(valueMarks).filter(key => valueMarks[key] === 'execCountSuffix')
+  const batchCount = Number(jsonObj.batchCount || 1)
+  return {
+    markFields,
+    batchCount: batchCountOptions.includes(batchCount) ? batchCount : 1
+  }
+}
+
+const applyCaseJsonControls = (target, markFields, batchCount) => {
+  const jsonObj = parseInstanceJson(target.instanceJson)
+  jsonObj.valueMarks = {}
+  ;(markFields || []).forEach(field => {
+    jsonObj.valueMarks[field] = 'execCountSuffix'
+  })
+  jsonObj.batchCount = batchCount || 1
+  target.instanceJson = JSON.stringify(jsonObj, null, 2)
+}
+
+const syncControlsFromJson = (target) => {
+  const controls = extractCaseJsonControls(target.instanceJson)
+  target.markFields = controls.markFields
+  target.batchCount = controls.batchCount
+}
+
+const handleMainMarkChange = (fields) => {
+  applyCaseJsonControls(formData, fields, formData.batchCount)
+}
+
+const handleMainBatchCountChange = (count) => {
+  applyCaseJsonControls(formData, formData.markFields, count)
+}
+
+const handleCopyMarkChange = (fields) => {
+  applyCaseJsonControls(copyFormData, fields, copyFormData.batchCount)
+}
+
+const handleCopyBatchCountChange = (count) => {
+  applyCaseJsonControls(copyFormData, copyFormData.markFields, count)
+}
+
+const normalizeListData = (data) => {
+  if (Array.isArray(data)) return data
+  return data?.items || data?.list || data?.records || []
+}
+
+const loadAllPagedOptions = async (apiMethod, params = {}) => {
+  const pageSize = 100
+  let pageNum = 1
+  const result = []
+  while (true) {
+    const res = await apiMethod({ ...params, pageNum, pageSize })
+    const data = res.data || {}
+    const rows = normalizeListData(data)
+    result.push(...rows)
+    const total = Number(data.total || result.length)
+    if (result.length >= total || rows.length < pageSize) {
+      break
+    }
+    pageNum += 1
+  }
+  return result
+}
+
+const loadExceptionCaseOptions = async () => {
+  try {
+    exceptionCaseOptions.value = await loadAllPagedOptions(exceptionCaseTypeApi.getExceptionCaseTypeList)
+  } catch (error) {
+    exceptionCaseOptions.value = []
+    console.error('加载异常类型失败:', error)
+  }
+}
+
+const clearGeneratePreview = () => {
+  generatePreview.value = null
+  generatePreviewItems.value = []
+}
+
+const buildGeneratePayload = () => ({
+  targetId: apiInfo.apiId,
+  operationType: generateForm.operationType,
+  templateIds: generateForm.templateIds,
+  exceptionIds: generateForm.exceptionIds,
+  includeCommon: true,
+  overwrite: generateForm.overwrite
+})
+
+const handleOpenGenerateDialog = async () => {
+  generateDialogVisible.value = true
+  clearGeneratePreview()
+  generateForm.operationType = null
+  generateForm.templateIds = []
+  generateForm.exceptionIds = []
+  generateForm.overwrite = false
+  if (!templateList.value.length) {
+    await loadTemplateList()
+  }
+  if (!exceptionCaseOptions.value.length) {
+    await loadExceptionCaseOptions()
+  }
+}
+
+const handlePreviewGeneratedCases = async () => {
+  if (!apiInfo.apiId) {
+    ElMessage.warning('API信息未加载完成')
+    return
+  }
+  generateLoading.value = true
+  try {
+    const res = await caseGenerateApi.previewApiCases(buildGeneratePayload())
+    if (handleApiResponse(res, '预览成功', '预览失败')) {
+      generatePreview.value = res.data
+      generatePreviewItems.value = res.data?.items || []
+    }
+  } finally {
+    generateLoading.value = false
+  }
+}
+
+const resetGeneratedCaseForm = () => {
+  Object.assign(generatedCaseForm, {
+    caseName: '',
+    targetId: apiInfo.apiId,
+    templateId: null,
+    templateName: '',
+    exceptionId: null,
+    exceptionName: '',
+    operationType: generatePreview.value?.operationType || generateForm.operationType || 1,
+    operationTypeName: generatePreview.value?.operationTypeName || getOperationTypeName(generateForm.operationType || 1),
+    payloadText: '{}',
+    exists: false
+  })
+}
+
+const getOperationTypeName = (value) => {
+  const numberValue = Number(value)
+  if (numberValue === 0) return '通用'
+  return operationTypeOptions.find(item => item.value === numberValue)?.label || '未知'
+}
+
+const buildExceptionLabel = (item = {}) => {
+  const exceptionName = item.exceptionName || item.exception_name || item.exceptionId
+  const operationType = item.operationType ?? item.operation_type ?? 0
+  return `${exceptionName}（${getOperationTypeName(operationType)}）`
+}
+
+const handleGeneratedCaseOperationChange = (value) => {
+  generatedCaseForm.operationTypeName = getOperationTypeName(value)
+}
+
+const handleAddGeneratedCase = () => {
+  generatedCaseEditIndex.value = -1
+  generatedCaseDialogTitle.value = '新增预览用例'
+  resetGeneratedCaseForm()
+  generatedCaseDialogVisible.value = true
+}
+
+const handleEditGeneratedCase = (row, index) => {
+  generatedCaseEditIndex.value = index
+  generatedCaseDialogTitle.value = '编辑预览用例'
+  Object.assign(generatedCaseForm, {
+    caseName: row.caseName || '',
+    targetId: row.targetId || apiInfo.apiId,
+    templateId: row.templateId || null,
+    templateName: row.templateName || '',
+    exceptionId: row.exceptionId || null,
+    exceptionName: row.exceptionName || '',
+    operationType: row.operationType || generatePreview.value?.operationType || 1,
+    operationTypeName: row.operationTypeName || getOperationTypeName(row.operationType || 1),
+    payloadText: formatJson(row.payload),
+    exists: !!row.exists
+  })
+  generatedCaseDialogVisible.value = true
+}
+
+const handleDeleteGeneratedCase = (index) => {
+  generatePreviewItems.value.splice(index, 1)
+  if (generatePreview.value) {
+    generatePreview.value.total = generatePreviewItems.value.length
+    generatePreview.value.existsCount = generatePreviewItems.value.filter(item => item.exists).length
+  }
+}
+
+const handleGeneratedCaseSubmit = () => {
+  let payload
+  try {
+    payload = JSON.parse(generatedCaseForm.payloadText)
+  } catch (error) {
+    ElMessage.error('参数JSON格式错误')
+    return
+  }
+  const item = {
+    caseName: generatedCaseForm.caseName,
+    targetId: generatedCaseForm.targetId || apiInfo.apiId,
+    templateId: generatedCaseForm.templateId || 0,
+    templateName: generatedCaseForm.templateName || '-',
+    exceptionId: generatedCaseForm.exceptionId || 0,
+    exceptionName: generatedCaseForm.exceptionName || '-',
+    operationType: generatedCaseForm.operationType || generatePreview.value?.operationType || 1,
+    operationTypeName: generatedCaseForm.operationTypeName || getOperationTypeName(generatedCaseForm.operationType),
+    payload,
+    exists: generatedCaseForm.exists
+  }
+  if (generatedCaseEditIndex.value >= 0) {
+    generatePreviewItems.value.splice(generatedCaseEditIndex.value, 1, item)
+  } else {
+    generatePreviewItems.value.push(item)
+  }
+  if (generatePreview.value) {
+    generatePreview.value.total = generatePreviewItems.value.length
+    generatePreview.value.existsCount = generatePreviewItems.value.filter(item => item.exists).length
+  }
+  generatedCaseDialogVisible.value = false
+}
+
+const handleSaveGeneratedCases = async () => {
+  if (!generatePreviewItems.value.length) {
+    ElMessage.warning('请先预览生成用例')
+    return
+  }
+  generateSaving.value = true
+  try {
+    const res = await caseGenerateApi.saveApiCases({
+      ...buildGeneratePayload(),
+      items: generatePreviewItems.value
+    })
+    if (handleApiResponse(res, '保存成功', '保存失败')) {
+      generateDialogVisible.value = false
+      await tableRef.value?.refresh()
+    }
+  } finally {
+    generateSaving.value = false
   }
 }
 
@@ -986,13 +1579,17 @@ const handleCopyTestcase = (row) => {
     expectResult: row.expectResult || '',
     remark: row.remark || '',
     tokenId: normalizeTestcaseTokenId(row),
+    markFields: [],
+    batchCount: 1,
     instanceJson: row.instanceJson || ''
   })
+  syncControlsFromJson(copyFormData)
   copyDialogVisible.value = true
 }
 
 const handleTestcaseMoreCommand = (command, row) => {
   const actions = {
+    edit: handleEditTestcase,
     copy: handleCopyTestcase,
     delete: handleDeleteTestcase
   }
@@ -1143,6 +1740,7 @@ const handleAddTemplate = () => {
     fieldName: '',
     fieldType: null,
     fieldSize: null,
+    defaultValue: '',
     isRequired: 'N',
     remark: '',
     projectId: apiInfo.projectId,
@@ -1156,6 +1754,34 @@ const handleEditTemplate = (row) => {
   templateDialogTitle.value = '编辑参数模板'
   Object.assign(templateFormData, row)
   templateDialogVisible.value = true
+}
+
+const handleOpenTemplateJsonParseDialog = () => {
+  templateJsonParseForm.jsonText = ''
+  templateJsonParseDialogVisible.value = true
+}
+
+const handleTemplateJsonParseSubmit = async () => {
+  if (!apiInfo.apiId) {
+    ElMessage.warning('API信息未加载完成')
+    return
+  }
+  templateJsonParseLoading.value = true
+  try {
+    const res = await apiTemplateApi.parseJsonTemplate({
+      apiId: apiInfo.apiId,
+      jsonText: templateJsonParseForm.jsonText
+    })
+    if (handleApiResponse(res, res.msg || 'JSON解析成功', 'JSON解析失败')) {
+      templateJsonParseDialogVisible.value = false
+      await loadTemplateList()
+    }
+  } catch (error) {
+    console.error('JSON解析失败:', error)
+    ElMessage.error('JSON解析失败')
+  } finally {
+    templateJsonParseLoading.value = false
+  }
 }
 
 // 删除参数模板
@@ -1502,6 +2128,12 @@ const getCodeType = (code) => {
   font-weight: bold;
 }
 
+.template-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .testcase-card {
   flex: 1;
   overflow: hidden;
@@ -1524,6 +2156,28 @@ const getCodeType = (code) => {
 .header-buttons {
   display: flex;
   gap: 10px;
+}
+
+.generate-preview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+
+.json-mini {
+  margin: 0;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.generate-option-extra {
+  float: right;
+  color: #909399;
+  font-size: 12px;
 }
 </style>
 

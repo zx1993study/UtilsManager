@@ -62,6 +62,12 @@ const routes = [
         meta: { title: '字典管理', icon: 'Collection' }
       },
       {
+        path: '/system/exception-case-type',
+        name: 'SystemExceptionCaseType',
+        component: () => import('@/views/system/exception-case-type/index.vue'),
+        meta: { title: '异常用例类型', icon: 'Warning' }
+      },
+      {
         path: '/system/log',
         name: 'SystemLog',
         component: () => import('@/views/system/log/index.vue'),
@@ -261,6 +267,10 @@ const router = createRouter({
 
 // 本次会话是否已经向后端校验过 token，避免每次导航都请求
 let tokenValidated = false
+
+export const markTokenValidated = () => {
+  tokenValidated = true
+}
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {

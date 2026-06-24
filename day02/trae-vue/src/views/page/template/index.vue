@@ -86,6 +86,24 @@
         />
       </el-form-item>
 
+      <el-form-item label="默认值" prop="defaultValue">
+        <el-input
+          v-model="formData.defaultValue"
+          type="textarea"
+          :rows="3"
+          placeholder="请输入默认值"
+        />
+      </el-form-item>
+
+      <el-form-item label="父元素" prop="parentElement">
+        <el-input
+          v-model="formData.parentElement"
+          type="textarea"
+          :rows="4"
+          placeholder='例如 {"parents":[],"nth":0}'
+        />
+      </el-form-item>
+
       <el-form-item label="状态" prop="status">
         <el-radio-group v-model="formData.status">
           <el-radio :label="1">启用</el-radio>
@@ -148,6 +166,8 @@ const columns = [
   { prop: 'locatorType', label: '定位器', width: 130, slot: 'locatorType' },
   { prop: 'elementType', label: '元素类型', width: 120, slot: 'elementType' },
   { prop: 'elementValue', label: '元素定位值', minWidth: 260, showOverflowTooltip: true },
+  { prop: 'defaultValue', label: '默认值', minWidth: 160, showOverflowTooltip: true },
+  { prop: 'parentElement', label: '父元素', minWidth: 220, showOverflowTooltip: true },
   { prop: 'remark', label: '备注', minWidth: 220, showOverflowTooltip: true },
   { prop: 'status', label: '状态', width: 90, slot: 'status' },
   { prop: 'createTime', label: '创建时间', width: 180 }
@@ -174,6 +194,8 @@ const formData = reactive({
   pageId: null,
   locatorType: 1,
   elementValue: '',
+  defaultValue: '',
+  parentElement: '',
   elementType: 1,
   operation: 1,
   remark: '',
@@ -197,6 +219,8 @@ const resetForm = () => {
     pageId: null,
     locatorType: 1,
     elementValue: '',
+    defaultValue: '',
+    parentElement: '',
     elementType: 1,
     operation: 1,
     remark: '',
@@ -211,6 +235,8 @@ const fillForm = (row) => {
     pageId: row.pageId || null,
     locatorType: row.locatorType ?? 1,
     elementValue: row.elementValue || '',
+    defaultValue: row.defaultValue || '',
+    parentElement: row.parentElement || '',
     elementType: row.elementType ?? 1,
     operation: row.operation ?? 1,
     remark: row.remark || '',
@@ -223,6 +249,8 @@ const buildPayload = () => ({
   pageId: formData.pageId,
   locatorType: formData.locatorType,
   elementValue: formData.elementValue,
+  defaultValue: formData.defaultValue,
+  parentElement: formData.parentElement,
   elementType: formData.elementType,
   operation: formData.operation,
   remark: formData.remark,

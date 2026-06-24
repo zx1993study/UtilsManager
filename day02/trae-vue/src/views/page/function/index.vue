@@ -139,8 +139,8 @@ import { ElMessageBox } from 'element-plus'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import * as pageFunctionApi from '@/api/page/page-function'
-import { getProjectList } from '@/api/project/project'
-import { getTokenOptions } from '@/api/project/token'
+import { getProjectSelectOptions } from '@/api/project/project'
+import { getTokenSelectOptions } from '@/api/project/token'
 import { handleApiResponse } from '@/utils/responseHandler'
 
 const router = useRouter()
@@ -201,7 +201,7 @@ const formRules = {
 
 const loadProjects = async () => {
   try {
-    const res = await getProjectList({ pageNum: 1, pageSize: 100 })
+    const res = await getProjectSelectOptions()
     projectOptions.value = res.data?.items || res.data?.list || res.data || []
   } catch (error) {
     console.error('加载项目列表失败:', error)
@@ -214,7 +214,7 @@ const loadTokenOptions = async (projectId) => {
     return
   }
   try {
-    const res = await getTokenOptions({
+    const res = await getTokenSelectOptions({
       projectId,
       tokenType: 2
     })
@@ -225,8 +225,7 @@ const loadTokenOptions = async (projectId) => {
 }
 
 const buildTokenLabel = (token) => {
-  const fileName = token.token ? ` / ${token.token}` : ''
-  return `${token.name || token.tokenId}${fileName}`
+  return `${token.tokenName || token.name || token.tokenId}`
 }
 
 const normalizeTokenIds = (row = {}) => {

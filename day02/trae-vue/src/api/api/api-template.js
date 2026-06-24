@@ -31,6 +31,14 @@ export function addTemplate(data) {
 }
 
 // 更新模板
+export function parseJsonTemplate(data) {
+  return request({
+    url: '/api/v1/apiTemplate/parseJson',
+    method: 'post',
+    data
+  })
+}
+
 export function updateTemplate(data) {
   return request({
     url: '/api/v1/apiTemplate',

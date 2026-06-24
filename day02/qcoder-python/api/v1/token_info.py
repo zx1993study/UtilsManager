@@ -11,6 +11,7 @@ from service.token_info_service import (
     get_token_info_service,
     get_token_info_list_service,
     get_token_info_options_service,
+    get_token_info_select_options_service,
     create_token_info_service,
     update_token_info_service,
     delete_token_info_service,
@@ -42,6 +43,22 @@ async def list_token_info_options(
         db=db,
         token_type=token_type,
         project_id=project_id,
+        name=name
+    )
+
+
+@router.get("/tokenInfo/selectOptions", response_model=dict)
+async def list_token_info_select_options(
+    project_id: int | None = Query(None, alias="projectId", description="项目ID"),
+    token_type: int | None = Query(None, alias="tokenType", description="来源 1 api 2 web"),
+    name: str | None = Query(None, description="Token名称"),
+    db: Session = Depends(get_db)
+):
+    """获取轻量Token下拉框列表，不需要分页参数。"""
+    return await get_token_info_select_options_service(
+        db=db,
+        project_id=project_id,
+        token_type=token_type,
         name=name
     )
 

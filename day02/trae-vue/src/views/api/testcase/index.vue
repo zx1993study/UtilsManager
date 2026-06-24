@@ -91,21 +91,62 @@
         <el-input v-model="formData.remark" type="textarea" placeholder="请输入备注" />
       </el-form-item>
 
+      <el-form-item label="标记字段" prop="markFields">
+        <el-select
+          v-model="formData.markFields"
+          multiple
+          clearable
+          filterable
+          placeholder="请选择需要追加执行次数的字段"
+          style="width: 100%"
+          @change="handleMarkChange"
+        >
+          <el-option
+            v-for="item in templateFieldOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="执行次数" prop="batchCount">
+        <el-select
+          v-model="formData.batchCount"
+          placeholder="请选择执行次数"
+          style="width: 100%"
+          @change="handleBatchCountChange"
+        >
+          <el-option
+            v-for="item in batchCountOptions"
+            :key="item"
+            :label="`${item}次`"
+            :value="item"
+          />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="用例输入" prop="instanceJson">
-        <el-input v-model="formData.instanceJson" type="textarea" placeholder="请输入用例参数(JSON格式)" />
+        <el-input
+          v-model="formData.instanceJson"
+          type="textarea"
+          :rows="5"
+          placeholder="请输入用例参数(JSON格式)"
+        />
       </el-form-item>
     </common-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as projectApi from '@/api/project/project'
 import * as apiListApi from '@/api/api/api'
+import * as apiTemplateApi from '@/api/api/api-template'
 import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
@@ -115,6 +156,18 @@ const submitLoading = ref(false)
 const projectOptions = ref([])
 const apiOptions = ref([])
 const tokenOptions = ref([])
+const templateList = ref([])
+
+const templateFieldOptions = computed(() => {
+  return (templateList.value || [])
+    .filter(item => item.fieldName)
+    .map(item => ({
+      label: item.fieldName,
+      value: item.fieldName
+    }))
+})
+
+const batchCountOptions = [1, 2, 3, 5, 10, 20, 50]
 
 // 列配置
 const columns = [
@@ -169,6 +222,8 @@ const formData = reactive({
   description: '',
   expectResult: '',
   remark: '',
+  markFields: [],
+  batchCount: 1,
   instanceJson: ''
 })
 
@@ -178,6 +233,25 @@ const formRules = {
   apiId: [{ required: true, message: '请选择API', trigger: 'change' }],
   instanceName: [{ required: true, message: '请输入用例名称', trigger: 'blur' }]
 }
+
+watch(() => formData.instanceJson, () => {
+  if (dialogVisible.value) {
+    syncControlsFromJson(formData)
+  }
+})
+
+const getListItems = (response) => {
+  const data = response?.data
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  if (Array.isArray(data?.list)) return data.list
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.data?.items)) return data.data.items
+  if (Array.isArray(data?.data?.list)) return data.data.list
+  return []
+}
+
+const getResponseData = (response) => response?.data?.data || response?.data || response || {}
 
 // 获取状态类型
 const getStatusType = (status) => {
@@ -202,11 +276,13 @@ const getStatusText = (status) => {
 // 加载项目列表
 const loadProjectList = async () => {
   try {
-    const response = await projectApi.getProjectList()
-    projectOptions.value = response.data.items.map(item => ({
-      label: item.projectName,
-      value: item.projectId
-    }))
+    const response = await projectApi.getProjectSelectOptions()
+    projectOptions.value = getListItems(response)
+      .map(item => ({
+        label: item.projectName || item.project_name || item.name,
+        value: item.projectId ?? item.project_id ?? item.id
+      }))
+      .filter(item => item.label && item.value !== undefined && item.value !== null)
   } catch (error) {
     console.error('加载项目列表失败:', error)
   }
@@ -216,12 +292,29 @@ const loadProjectList = async () => {
 const loadApiList = async (projectId) => {
   try {
     const response = await apiListApi.getApiOptions({ projectId })
-    apiOptions.value = response.data.items.map(item => ({
-      label: item.apiName,
-      value: item.apiId
-    }))
+    apiOptions.value = getListItems(response)
+      .map(item => ({
+        label: item.apiName || item.api_name || item.name,
+        value: item.apiId ?? item.api_id ?? item.id
+      }))
+      .filter(item => item.label && item.value !== undefined && item.value !== null)
   } catch (error) {
     console.error('加载API列表失败:', error)
+  }
+}
+
+const loadTemplateList = async (apiId) => {
+  templateList.value = []
+  if (!apiId) return
+  try {
+    const response = await apiTemplateApi.getTemplateList({
+      apiId,
+      pageNum: 1,
+      pageSize: 100
+    })
+    templateList.value = getListItems(response)
+  } catch (error) {
+    console.error('加载参数模板失败:', error)
   }
 }
 
@@ -242,7 +335,7 @@ const loadTokenOptionsByApi = async (apiId, currentTokenId = null) => {
   if (!apiId) return
   try {
     const response = await apiListApi.getApiDetail(apiId)
-    buildTokenOptionsFromApi(response.data || {})
+    buildTokenOptionsFromApi(getResponseData(response))
     formData.tokenId = currentTokenId || getDefaultTokenId()
   } catch (error) {
     console.error('加载Token列表失败:', error)
@@ -250,14 +343,118 @@ const loadTokenOptionsByApi = async (apiId, currentTokenId = null) => {
 }
 
 const handleApiChange = async (apiId) => {
-  await loadTokenOptionsByApi(apiId)
+  await Promise.all([
+    loadTokenOptionsByApi(apiId),
+    loadTemplateList(apiId)
+  ])
+  fillDefaultJsonWhenEmpty()
+}
+
+const parseInstanceJson = (value) => {
+  if (!value) return {}
+  if (typeof value === 'object') return { ...value }
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch (error) {
+    return {}
+  }
+}
+
+const formatInstanceJson = (value) => {
+  if (!value) return JSON.stringify({ valueMarks: {}, batchCount: 1 }, null, 2)
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
+}
+
+const extractCaseJsonControls = (value) => {
+  const jsonObj = parseInstanceJson(value)
+  const valueMarks = jsonObj.valueMarks && typeof jsonObj.valueMarks === 'object' ? jsonObj.valueMarks : {}
+  const markFields = Object.keys(valueMarks).filter(key => valueMarks[key] === 'execCountSuffix')
+  const batchCount = Number(jsonObj.batchCount || 1)
+  return {
+    markFields,
+    batchCount: batchCountOptions.includes(batchCount) ? batchCount : 1
+  }
+}
+
+const applyCaseJsonControls = (target, markFields, batchCount) => {
+  const jsonObj = parseInstanceJson(target.instanceJson)
+  jsonObj.valueMarks = {}
+  ;(markFields || []).forEach(field => {
+    jsonObj.valueMarks[field] = 'execCountSuffix'
+  })
+  jsonObj.batchCount = batchCount || 1
+  target.instanceJson = JSON.stringify(jsonObj, null, 2)
+}
+
+const syncControlsFromJson = (target) => {
+  const controls = extractCaseJsonControls(target.instanceJson)
+  target.markFields = controls.markFields
+  target.batchCount = controls.batchCount
+}
+
+const handleMarkChange = (fields) => {
+  applyCaseJsonControls(formData, fields, formData.batchCount)
+}
+
+const handleBatchCountChange = (count) => {
+  applyCaseJsonControls(formData, formData.markFields, count)
+}
+
+const getFieldTypeDefaultValue = (fieldType) => {
+  const typeMap = {
+    1: '',
+    2: 0,
+    3: false,
+    4: [],
+    5: {}
+  }
+  return typeMap[fieldType] !== undefined ? typeMap[fieldType] : ''
+}
+
+const getTemplateDefaultValue = (template) => {
+  if (template.defaultValue !== undefined && template.defaultValue !== null && template.defaultValue !== '') {
+    try {
+      return JSON.parse(template.defaultValue)
+    } catch (error) {
+      return template.defaultValue
+    }
+  }
+  return getFieldTypeDefaultValue(template.fieldType)
+}
+
+const generateDefaultJsonFromTemplate = () => {
+  const jsonObj = {
+    valueMarks: {},
+    batchCount: 1
+  }
+  templateList.value.forEach(template => {
+    if (template.fieldName) {
+      jsonObj[template.fieldName] = getTemplateDefaultValue(template)
+    }
+  })
+  return JSON.stringify(jsonObj, null, 2)
+}
+
+const fillDefaultJsonWhenEmpty = () => {
+  const jsonObj = parseInstanceJson(formData.instanceJson)
+  const contentKeys = Object.keys(jsonObj).filter(key => !['valueMarks', 'batchCount'].includes(key))
+  if (templateList.value.length && contentKeys.length === 0) {
+    formData.instanceJson = generateDefaultJsonFromTemplate()
+  } else {
+    applyCaseJsonControls(formData, formData.markFields, formData.batchCount)
+  }
 }
 
 // 处理项目变化
 const handleProjectChange = (projectId) => {
   formData.apiId = ''
   formData.tokenId = null
+  formData.markFields = []
   tokenOptions.value = []
+  templateList.value = []
+  applyCaseJsonControls(formData, [], formData.batchCount)
   if (projectId) {
     loadApiList(projectId)
   } else {
@@ -269,6 +466,7 @@ const handleProjectChange = (projectId) => {
 const handleAdd = () => {
   isEdit.value = false
   dialogTitle.value = '新增用例'
+  const defaultInstanceJson = JSON.stringify({ valueMarks: {}, batchCount: 1 }, null, 2)
   Object.assign(formData, {
     instanceId: null,
     projectId: '',
@@ -278,8 +476,16 @@ const handleAdd = () => {
     description: '',
     expectResult: '',
     remark: '',
-    instanceJson: ''
+    markFields: [],
+    batchCount: 1,
+    instanceJson: defaultInstanceJson
   })
+  apiOptions.value = []
+  tokenOptions.value = []
+  templateList.value = []
+  if (!projectOptions.value.length) {
+    loadProjectList()
+  }
   dialogVisible.value = true
 }
 
@@ -287,14 +493,23 @@ const handleAdd = () => {
 const handleEdit = async (row) => {
   isEdit.value = true
   dialogTitle.value = '编辑用例'
-  Object.assign(formData, row)
+  Object.assign(formData, {
+    ...row,
+    markFields: [],
+    batchCount: 1,
+    instanceJson: formatInstanceJson(row.instanceJson)
+  })
   // 如果有项目ID，加载对应的API列表
   if (row.projectId) {
     await loadApiList(row.projectId)
   }
   if (row.apiId) {
-    await loadTokenOptionsByApi(row.apiId, row.tokenId)
+    await Promise.all([
+      loadTokenOptionsByApi(row.apiId, row.tokenId),
+      loadTemplateList(row.apiId)
+    ])
   }
+  syncControlsFromJson(formData)
   dialogVisible.value = true
 }
 
@@ -347,10 +562,11 @@ const handleSubmit = async () => {
   try {
     submitLoading.value = true
     let res
+    const { markFields, batchCount, ...submitData } = formData
     if (isEdit.value) {
-      res = await apiTestcaseApi.updateTestcase(formData)
+      res = await apiTestcaseApi.updateTestcase(submitData)
     } else {
-      res = await apiTestcaseApi.addTestcase(formData)
+      res = await apiTestcaseApi.addTestcase(submitData)
     }
     if (handleApiResponse(res, isEdit.value ? '更新成功' : '添加成功', '提交失败')) {
       dialogVisible.value = false

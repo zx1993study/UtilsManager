@@ -1,4 +1,5 @@
 from sqlalchemy import BigInteger, Column, DateTime, Integer, SmallInteger, String, Text
+from sqlalchemy.dialects.mysql import LONGTEXT
 
 from core.db import Base
 
@@ -9,7 +10,7 @@ class PageInstance(Base):
     page_instance_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="primary key")
     page_id = Column(BigInteger, comment="page id")
     token_id = Column(BigInteger, comment="token id")
-    operation_json = Column(Text, comment="operation json")
+    operation_json = Column(Text().with_variant(LONGTEXT(), "mysql"), comment="operation json")
     instance_name = Column(String(50), comment="instance name")
     screen_photo_file = Column(String(100), comment="screenshot file")
     description = Column(Text, comment="description")

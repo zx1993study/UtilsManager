@@ -18,6 +18,7 @@ class ApiExecuteRequest(BaseModel):
     execution_type: int = Field(..., description="执行类型: 1-单实例, 2-批量实例, 3-API下所有实例, 4-项目下所有实例")
     target_id: Optional[int] = Field(None, description="目标ID (instance_id/api_id/project_id)")
     target_ids: Optional[List[int]] = Field(None, description="目标ID列表 (用于批量执行)")
+    token_id: Optional[int] = Field(None, description="tokenId")
 
 
 class ApiExecuteResult(BaseModel):

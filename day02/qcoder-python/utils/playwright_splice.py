@@ -113,6 +113,25 @@ def _clean_regex_text(value: str) -> tuple[str, bool]:
     return text, False
 
 
+def _nth_from_source_remark(remark: Any) -> int | None:
+    if not isinstance(remark, str):
+        return None
+    if re.search(r"\.first(?:\b|\s*\()", remark):
+        return 0
+    match = re.search(r"\.nth\(\s*(\d+)\s*\)", remark)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _is_int_like(value: Any) -> bool:
+    try:
+        int(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 class PlaywrightSplice:
     """Execute element templates generated from Playwright codegen."""
 
@@ -150,19 +169,84 @@ class PlaywrightSplice:
             return locator.filter(has_text=text)
 
         if locator_type == LOCATOR_CSS:
-            return scope.locator(_single_arg_text(element_value)).first
+            return scope.locator(_single_arg_text(element_value))
 
         if locator_type == LOCATOR_LABEL:
             return scope.get_by_label(_single_arg_text(element_value))
 
         raise RuntimeError(f"Unsupported locator type: {locator_type}")
 
+    def _first_locator(self, locator):
+        return locator.first
+
+    def _click_locator(self, locator, logs: list[str] | None = None, label: str = "", timeout: int | None = None):
+        try:
+            count = locator.count()
+        except Exception:
+            count = 0
+        if count > 1:
+            last_error = None
+            for index in range(min(count, 10)):
+                try:
+                    locator.nth(index).click(timeout=2000 if timeout is None else timeout)
+                    if index > 0 and logs is not None:
+                        logs.append(f"[locator-retry] {label} 多元素匹配，已点击 nth={index}")
+                    return
+                except Exception as error:
+                    last_error = error
+            if last_error is not None:
+                raise last_error
+        target = self._first_locator(locator)
+        if timeout is None:
+            target.click()
+        else:
+            target.click(timeout=timeout)
+
+    def _override_click_locator(self, page, template, click_text: str):
+        locator_type = int(template.locator_type or 0)
+        if locator_type == LOCATOR_ROLE:
+            info = _parse_role_value(template.element_value)
+            role = info.get("role") or ""
+            kwargs = {}
+            if info.get("exact") is not None:
+                kwargs["exact"] = bool(info.get("exact"))
+            return page.get_by_role(role, name=click_text, **kwargs)
+        if locator_type == LOCATOR_PLACEHOLDER:
+            return page.get_by_placeholder(click_text)
+        if locator_type == LOCATOR_TEXT:
+            exact = _keyword_arg_text(template.element_value, "exact")
+            kwargs = {"exact": str(exact).strip().lower() == "true"} if exact is not None else {}
+            return page.get_by_text(click_text, **kwargs)
+        if locator_type == LOCATOR_LISTITEM_TEXT:
+            return page.get_by_role("listitem").filter(has_text=click_text)
+        if locator_type == LOCATOR_LABEL:
+            return page.get_by_label(click_text)
+        return page.get_by_text(click_text, exact=True)
+
     def _template_locator(self, page, template, params: dict | None = None, apply_nth: bool = True):
         params = params or {}
-        remark = _json_or_empty(template.remark)
+        parent_meta = _json_or_empty(getattr(template, "parent_element", None))
+        raw_remark = getattr(template, "remark", None)
+        remark = _json_or_empty(raw_remark)
         parents = []
-        nth_value = None
-        if isinstance(remark, list):
+        nth_value = _nth_from_source_remark(raw_remark)
+        if isinstance(parent_meta, dict):
+            if isinstance(parent_meta.get("parents"), list):
+                parents = parent_meta["parents"]
+            elif isinstance(parent_meta.get("element"), list):
+                parents = [
+                    {
+                        "element_name": item.get("elementName") or item.get("element_name"),
+                        "locator_type": item.get("elementType") or item.get("locator_type"),
+                        "element_value": item.get("elementValue") or item.get("element_value"),
+                    }
+                    for item in parent_meta["element"]
+                ]
+            nth_value = parent_meta.get("nth")
+        elif isinstance(parent_meta, list):
+            parents = parent_meta
+
+        if not parents and nth_value is None and isinstance(remark, list):
             if len(remark) == 1 and isinstance(remark[0], dict) and "nth" in remark[0]:
                 nth_value = remark[0].get("nth")
             else:
@@ -189,31 +273,43 @@ class PlaywrightSplice:
             scope = self._locate(scope, int(parent.get("locator_type") or 0), parent.get("element_value"))
         locator = self._locate(scope, int(template.locator_type or 0), template.element_value)
         nth_value = self._nth_value(params, template, nth_value)
-        if apply_nth and nth_value is not None:
-            locator = locator.nth(int(nth_value))
+        if apply_nth:
+            if nth_value is not None:
+                locator = locator.nth(int(nth_value))
+            else:
+                locator = self._first_locator(locator)
         return locator
 
-    def _click_template(self, page, template, params: dict, logs: list[str]) -> None:
-        param_value = self._param_value(params, template, None)
-        is_button = "button" in str(template.element_value or "").lower()
-        if is_button and param_value is not None and not isinstance(param_value, list) and str(param_value).strip() != "":
-            click_text = str(param_value).strip()
-            locator = page.get_by_role("button", name=click_text)
-            locator.wait_for(state="visible")
-            locator.click()
-            logs.append(f"[param-click-button] {template.element_name} => {click_text}")
-            return
+    def _template_nth_default(self, template):
+        parent_meta = _json_or_empty(getattr(template, "parent_element", None))
+        if isinstance(parent_meta, dict) and "nth" in parent_meta:
+            return parent_meta.get("nth")
+        if isinstance(parent_meta, list):
+            for item in parent_meta:
+                if isinstance(item, dict) and "nth" in item:
+                    return item.get("nth")
 
         remark = _json_or_empty(template.remark)
-        optional = self._is_optional_template(template)
-        nth_default = None
         if isinstance(remark, list):
             for item in remark:
                 if isinstance(item, dict) and "nth" in item:
-                    nth_default = item.get("nth")
-                    break
+                    return item.get("nth")
         elif isinstance(remark, dict):
-            nth_default = remark.get("nth")
+            return remark.get("nth")
+        return _nth_from_source_remark(getattr(template, "remark", None))
+
+    def _click_template(self, page, template, params: dict, logs: list[str]) -> None:
+        nth_default = self._template_nth_default(template)
+        param_value = self._param_value(params, template, None, include_template_default=False)
+        is_nth_value = nth_default is not None and _is_int_like(param_value)
+        if param_value is not None and not isinstance(param_value, list) and str(param_value).strip() != "" and not is_nth_value:
+            click_text = str(param_value).strip()
+            locator = self._override_click_locator(page, template, click_text)
+            self._click_locator(locator, logs, template.element_name)
+            logs.append(f"[param-click] {template.element_name} => {click_text}")
+            return
+
+        optional = self._is_optional_template(template)
 
         nth_value = self._nth_value(params, template, nth_default)
         if nth_value is not None:
@@ -225,9 +321,9 @@ class PlaywrightSplice:
                 base_locator.nth(index).click(timeout=2000 if optional else None)
                 return
 
-        locator = self._template_locator(page, template, params)
+        locator = self._template_locator(page, template, params, apply_nth=nth_value is not None)
         try:
-            locator.click(timeout=2000 if optional else None)
+            self._click_locator(locator, logs, template.element_name, timeout=2000 if optional else None)
         except Exception as error:
             if optional:
                 logs.append(f"[skip] {template.element_name} 可选点击未找到，继续执行: {error}")
@@ -236,7 +332,7 @@ class PlaywrightSplice:
                 raise
             logs.append(f"[retry] {template.element_name} nth定位失败，回退基础定位器点击: {error}")
             fallback_locator = self._template_locator(page, template, params, apply_nth=False)
-            fallback_locator.click()
+            self._click_locator(fallback_locator, logs, template.element_name)
 
     def _param_keys(self, template, param_key: str | None = None):
         keys = []
@@ -251,6 +347,21 @@ class PlaywrightSplice:
         return keys
 
     def _nth_value(self, params: dict, template, default: Any = None):
+        if default is None:
+            default = self._template_nth_default(template)
+        nth_elements = params.get("nthElements")
+        if isinstance(nth_elements, dict):
+            element_id = self._template_element_id(template)
+            for key in (element_id, str(element_id)):
+                if key not in nth_elements:
+                    continue
+                value = nth_elements[key]
+                if value is None or str(value).strip() == "":
+                    continue
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    continue
         remark = _json_or_empty(template.remark)
         param_key = remark.get("paramKey") if isinstance(remark, dict) else None
         if default is None and not param_key:
@@ -261,15 +372,21 @@ class PlaywrightSplice:
             value = params[key]
             if value is None or str(value).strip() == "":
                 continue
-            return int(value)
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
         return default
 
-    def _param_value(self, params: dict, template, default: Any = ""):
+    def _param_value(self, params: dict, template, default: Any = "", include_template_default: bool = True):
         remark = _json_or_empty(template.remark)
         param_key = None
+        template_default = getattr(template, "default_value", None)
         if isinstance(remark, dict):
             param_key = remark.get("paramKey")
             default = remark.get("defaultValue", default)
+        if include_template_default and template_default not in (None, ""):
+            default = template_default
         for key in self._param_keys(template, param_key):
             if key and key in params:
                 return params[key]
@@ -287,11 +404,10 @@ class PlaywrightSplice:
         text_value = str(text)
         locator_type = int(template.locator_type or 0)
         if locator_type == LOCATOR_LISTITEM_TEXT:
-            option_locator = page.get_by_role("listitem").filter(has_text=text_value).first
+            option_locator = page.get_by_role("listitem").filter(has_text=text_value)
         else:
             option_locator = self._template_locator(page, template, apply_nth=False)
-        option_locator.wait_for(state="visible")
-        option_locator.click()
+        self._click_locator(option_locator)
 
     def _screen_targets(self, params: dict, key: str) -> set[str]:
         raw_value = params.get(key)
@@ -378,9 +494,8 @@ class PlaywrightSplice:
                         return
                     os.makedirs(screenshot_dir, exist_ok=True)
                     element_id = self._template_element_id(template) or "unknown"
-                    prefix = screenshot_prefix or "screenshot"
                     ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
-                    file_name = f"{prefix}_{kind}_{element_id}_{ts}.png"
+                    file_name = f"{element_id}_{ts}.png"
                     path = os.path.join(screenshot_dir, file_name)
                     page.screenshot(path=path, full_page=True)
                     captured_screenshots.append(path)
@@ -431,10 +546,9 @@ class PlaywrightSplice:
                             try:
                                 locator.select_option(label=text_value)
                             except Exception:
-                                locator.click()
+                                self._click_locator(locator, logs, template.element_name)
                                 option_locator = page.get_by_text(text_value, exact=True)
-                                option_locator.wait_for(state="visible")
-                                option_locator.click()
+                                self._click_locator(option_locator, logs, text_value)
                         elif operation == OP_UPLOAD:
                             select_group_keys = []
                             select_group_index = 0

@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 import json
 
 
-def get_api_execution_context(db: Session, instance_id: int) -> Optional[Dict[str, Any]]:
+def get_api_execution_context(db: Session, instance_id: int, token_id: int | None = None) -> Optional[Dict[str, Any]]:
     """获取执行所需的完整上下文信息（关联查询）- 同步版本"""
     instance = db.query(ApiInstance).filter(ApiInstance.instance_id == instance_id).first()
     if not instance:
@@ -24,9 +24,9 @@ def get_api_execution_context(db: Session, instance_id: int) -> Optional[Dict[st
     project_info = db.query(ProjectInfo).filter(ProjectInfo.project_id == api_info.project_id).first()
     
     token_info = None
-    token_id = instance.token_id or api_info.token_id
-    if token_id:
-        token_info = db.query(TokenInfo).filter(TokenInfo.token_id == token_id).first()
+    selected_token_id = token_id or instance.token_id or api_info.token_id
+    if selected_token_id:
+        token_info = db.query(TokenInfo).filter(TokenInfo.token_id == selected_token_id).first()
         
     return {
         "instance": instance,
@@ -76,14 +76,19 @@ def update_api_instance_exec_count(db: Session, instance_id: int) -> bool:
         return True
     return False
 
-def update_api_instance_execute_state(db: Session, instance_id: int, success: bool) -> bool:
+def update_api_instance_execute_state(
+    db: Session,
+    instance_id: int,
+    success: bool,
+    exec_increment: int = 1,
+) -> bool:
     """更新 API 测试用例执行次数和执行状态。
 
     status: 0 未执行，1 成功，2 失败
     """
     instance = db.query(ApiInstance).filter(ApiInstance.instance_id == instance_id).first()
     if instance:
-        instance.exec_count = (instance.exec_count or 0) + 1
+        instance.exec_count = (instance.exec_count or 0) + max(int(exec_increment or 1), 1)
         instance.status = 1 if success else 2
         db.commit()
         return True

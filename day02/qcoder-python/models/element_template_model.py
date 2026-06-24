@@ -11,6 +11,8 @@ class ElementTemplate(Base):
     page_id = Column(BigInteger, comment="page id")
     locator_type = Column(SmallInteger, comment="locator type")
     element_value = Column(Text, comment="element value")
+    default_value = Column(Text, comment="default value")
+    parent_element = Column(Text, comment="parent element")
     element_type = Column(SmallInteger, comment="element type")
     status = Column(SmallInteger, comment="status")
     operation = Column(SmallInteger, comment="operation")

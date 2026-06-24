@@ -22,6 +22,14 @@ export function getTokenOptions(params) {
   })
 }
 
+export function getTokenSelectOptions(params) {
+  return request({
+    url: '/api/v1/tokenInfo/selectOptions',
+    method: 'get',
+    params
+  })
+}
+
 // 获取Token详情
 export function getTokenDetail(id) {
   return request({

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from core.logger import logger
 from core.responsemsg import error_response, success_response
 from mysql.app_sql import (
     create_app_info,
@@ -286,10 +287,12 @@ async def execute_app_service(db: Session, app_id: int, instance_ids: list[int])
                 code = str(proc.returncode)
                 response = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
             except subprocess.TimeoutExpired:
+                logger.exception("App 用例执行超时: app_instance_id=%s", instance.app_instance_id)
                 ok = False
                 code = "timeout"
                 response = "执行超时"
             except Exception as exc:
+                logger.exception("App 用例执行异常: app_instance_id=%s", instance.app_instance_id)
                 ok = False
                 code = "error"
                 response = str(exc)

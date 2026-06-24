@@ -18,7 +18,68 @@ from core.logger import logger
 """HTTP方法映射"""
 METHOD_MAP = {1: 'GET', 2: 'POST', 3: 'PUT', 4: 'DELETE', 5: 'PATCH'}
 
-def _build_and_send_request(context: dict) -> dict:
+
+def _parse_json_object(raw) -> dict:
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        try:
+            parsed = json.loads(raw, strict=False)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+
+def _get_batch_count(instance_json: dict) -> int:
+    value = instance_json.get("batchCount", 1)
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        count = 1
+    return max(count, 1)
+
+
+def _apply_value_marks(instance_json: dict, exec_count: int | None = 0) -> dict:
+    result = dict(instance_json or {})
+    value_marks = result.pop("valueMarks", None)
+    result.pop("batchCount", None)
+    if not isinstance(value_marks, dict):
+        return result
+
+    offset = (exec_count or 0) + 1
+    for key, mark in value_marks.items():
+        if mark != "execCountSuffix" or key not in result:
+            continue
+        value = result.get(key)
+        if isinstance(value, (dict, list)) or value is None:
+            continue
+        if isinstance(value, str) and value.isdigit():
+            result[key] = str(int(value) + offset)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            result[key] = value + offset
+        else:
+            result[key] = f"{value}{offset}"
+    return result
+
+
+def _build_result_db_data(exec_result: dict) -> dict:
+    status_code = exec_result.get('status_code') or 0
+    is_normal = int(status_code) == 200
+    return {
+        "instance_id": exec_result['instance_id'],
+        "result_status": 1 if is_normal else 2,
+        "code": str(status_code) if status_code else "000",
+        "response_info": exec_result['response_info'] if exec_result['response_info'] else exec_result.get('error_message', ''),
+        "remark": f"耗时: {exec_result['execution_time']}s"
+    }
+
+
+def _build_and_send_request(context: dict, request_params: dict | None = None) -> dict:
     """核心逻辑：构建请求并发送"""
     instance = context['instance']
     api_info = context['api_info']
@@ -59,20 +120,18 @@ def _build_and_send_request(context: dict) -> dict:
         data = None
         json_data = None
         
-        if instance.instance_json:
-            try:
-                inst_json = json.loads(instance.instance_json)
-                path_type = api_info.params_path.lower() if api_info.params_path else 'in'
-                
-                if path_type == 'data':
-                    data = inst_json
-                elif path_type == 'body':
-                    json_data = inst_json
-                    headers['Content-Type'] = 'application/json'
-                else:
-                    """'in' or others treated as query params"""
-                    params = inst_json
-            except: pass
+        inst_json = request_params if request_params is not None else _parse_json_object(instance.instance_json)
+        if inst_json:
+            path_type = api_info.params_path.lower() if api_info.params_path else 'in'
+            
+            if path_type == 'data':
+                data = inst_json
+            elif path_type == 'body':
+                json_data = inst_json
+                headers['Content-Type'] = 'application/json'
+            else:
+                """'in' or others treated as query params"""
+                params = inst_json
             
         """4. 发送请求"""
         method = METHOD_MAP.get(api_info.method_type, 'GET')
@@ -88,7 +147,7 @@ def _build_and_send_request(context: dict) -> dict:
         response.encoding = 'utf-8'
         logger.info(f"{instance.instance_name} - {api_info.api_name} - {method} - {url} - {response.status_code} - {response.text[:1000]}")
         result_data.update({
-            "success": True,
+            "success": response.status_code == 200,
             "status_code": response.status_code,
             "code": str(response.status_code),
             "response_info": response.text[:10000],
@@ -96,6 +155,12 @@ def _build_and_send_request(context: dict) -> dict:
         })
         
     except Exception as e:
+        logger.exception(
+            "API 执行异常: instance_id=%s, api_name=%s, method_url=%s",
+            getattr(instance, "instance_id", None),
+            getattr(api_info, "api_name", None),
+            getattr(api_info, "method_url", None),
+        )
         result_data.update({
             "success": False,
             "error_message": str(e),
@@ -104,32 +169,36 @@ def _build_and_send_request(context: dict) -> dict:
         
     return result_data
 
-def _execute_single_task(db: Session, instance_id: int) -> dict:
+
+def _execute_context_task(context: dict) -> tuple[dict, int, bool]:
+    instance = context["instance"]
+    raw_instance_json = _parse_json_object(instance.instance_json)
+    batch_count = _get_batch_count(raw_instance_json)
+    base_exec_count = instance.exec_count or 0
+    exec_result = None
+    for index in range(batch_count):
+        request_params = _apply_value_marks(raw_instance_json, base_exec_count + index)
+        exec_result = _build_and_send_request(context, request_params)
+    return _build_result_db_data(exec_result), batch_count, exec_result["success"]
+
+
+def _execute_single_task(db: Session, instance_id: int, token_id: int | None = None) -> dict:
     """执行单个任务并返回结果字典（用于存入数据库）"""
-    context = get_api_execution_context(db, instance_id)
+    context = get_api_execution_context(db, instance_id, token_id=token_id)
     if not context:
         update_api_instance_execute_state(db, instance_id, False)
         return {
             "instance_id": instance_id,
-            "result_status": 0,
+            "result_status": 2,
             "code": "404",
             "response_info": json.dumps({"error": "Instance or related info not found"}),
             "remark": "执行失败：未找到相关配置"
         }
         
-    exec_result = _build_and_send_request(context)
+    result_db_data, batch_count, success = _execute_context_task(context)
     
     """更新执行次数"""
-    update_api_instance_execute_state(db, instance_id, exec_result['success'])
-    
-    """构造符合 ApiResult 模型的字典"""
-    result_db_data = {
-        "instance_id": exec_result['instance_id'],
-        "result_status": 1 if exec_result['success'] else 0,
-        "code": str(exec_result['status_code']) if exec_result['status_code'] else "000",
-        "response_info": exec_result['response_info'] if exec_result['response_info'] else exec_result.get('error_message', ''),
-        "remark": f"耗时: {exec_result['execution_time']}s"
-    }
+    update_api_instance_execute_state(db, instance_id, success, batch_count)
     
     return result_db_data
 
@@ -138,6 +207,7 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
     etype = request.execution_type
     tid = request.target_id
     tids = request.target_ids
+    token_id = request.token_id
     
     instance_ids = []
     
@@ -176,39 +246,34 @@ async def execute_api_service(db: Session, request: ApiExecuteRequest):
                 """优化：主线程先获取所有 context"""
                 contexts = []
                 for iid in instance_ids:
-                    ctx = get_api_execution_context(db, iid)
+                    ctx = get_api_execution_context(db, iid, token_id=token_id)
                     if ctx:
                         contexts.append((iid, ctx))
                     else:
                         results.append({
                             "instance_id": iid,
-                            "result_status": 0,
+                            "result_status": 2,
                             "code": "404",
                             "response_info": "Not Found",
                             "remark": "配置缺失"
                         })
                         update_api_instance_execute_state(db, iid, False)
                 
-                future_to_id = {executor.submit(_build_and_send_request, ctx): iid for iid, ctx in contexts}
+                future_to_id = {executor.submit(_execute_context_task, ctx): iid for iid, ctx in contexts}
                 for future in as_completed(future_to_id):
                     iid = future_to_id[future]
                     try:
-                        exec_res = future.result()
-                        results.append({
-                            "instance_id": exec_res['instance_id'],
-                            "result_status": 1 if exec_res['success'] else 0,
-                            "code": str(exec_res['status_code']),
-                            "response_info": exec_res['response_info'] or exec_res.get('error_message', ''),
-                            "remark": f"耗时: {exec_res['execution_time']}s"
-                        })
+                        result_db_data, batch_count, success = future.result()
+                        results.append(result_db_data)
                         """更新执行次数（在主线程或单独处理，避免线程竞争）"""
-                        update_api_instance_execute_state(db, iid, exec_res['success'])
+                        update_api_instance_execute_state(db, iid, success, batch_count)
                     except Exception as e:
-                        results.append({"instance_id": iid, "response_info": str(e), "result_status": 0, "code": "500", "remark": "执行异常"})
+                        logger.exception("API 批量执行线程异常: instance_id=%s", iid)
+                        results.append({"instance_id": iid, "response_info": str(e), "result_status": 2, "code": "500", "remark": "执行异常"})
                         update_api_instance_execute_state(db, iid, False)
         else:
             for iid in instance_ids:
-                res = _execute_single_task(db, iid)
+                res = _execute_single_task(db, iid, token_id=token_id)
                 results.append(res)
                 
         """批量保存结果到 api_result"""

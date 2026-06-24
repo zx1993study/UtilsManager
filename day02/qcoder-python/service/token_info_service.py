@@ -9,6 +9,7 @@ from mysql.token_info_sql import (
     get_token_info_by_unique_fields,
     get_token_info_list,
     get_token_info_options,
+    get_token_info_select_options,
     create_token_info,
     update_token_info,
     delete_token_info,
@@ -98,6 +99,27 @@ async def get_token_info_options_service(
             error='{"errorCode": "INVALID_TOKEN_TYPE", "message": "tokenType只能为1(api)或2(web)"}'
         )
     items = await get_token_info_options(
+        db=db,
+        project_id=project_id,
+        token_type=token_type,
+        name=name
+    )
+    return success_response(msg="查询成功", data=items)
+
+
+async def get_token_info_select_options_service(
+    db: Session,
+    project_id: int | None = None,
+    token_type: int | None = None,
+    name: str | None = None
+):
+    if token_type is not None and token_type not in (1, 2):
+        return error_response(
+            msg="查询失败，来源参数错误",
+            data=None,
+            error='{"errorCode": "INVALID_TOKEN_TYPE", "message": "tokenType只能为1(api)或2(web)"}'
+        )
+    items = await get_token_info_select_options(
         db=db,
         project_id=project_id,
         token_type=token_type,

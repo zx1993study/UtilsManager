@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select
 from models.api_info_model import ApiInfo
 from models.project_info_model import ProjectInfo
 from models.token_info_model import TokenInfo
-from mysql.api_token_info_sql import get_api_tokens
+from mysql.api_token_info_sql import get_api_tokens, get_api_tokens_map
 from typing import List, Optional, Tuple
 from schemas.api_info_schemas import ApiInfoInfo, ApiInfoList, ApiInfoOption, ApiInfoOptionQuery
 from utils.data_paser import set_audit_fields_for_create, set_audit_fields_for_update
@@ -124,31 +124,42 @@ async def get_api_info_list(
     offset = (data.page_num - 1) * data.page_size
     
     """查询总数"""
-    count_stmt = select(func.count()).select_from(ApiInfo).outerjoin(
-        ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
-    ).outerjoin(
-        TokenInfo, ApiInfo.token_id == TokenInfo.token_id
-    ).where(*data.filter_params())
+    count_stmt = select(func.count()).select_from(ApiInfo).where(*data.filter_params())
     total = db.execute(count_stmt).scalar()
     
     """使用JOIN查询关联project_info和token_info表"""
     items = db.query(
         ApiInfo,
         ProjectInfo.project_name,
-        ProjectInfo.project_address,
-        TokenInfo.name.label('token_name'),
-        TokenInfo.token
+        ProjectInfo.project_address
     ).outerjoin(
         ProjectInfo, ApiInfo.project_id == ProjectInfo.project_id
-    ).outerjoin(
-        TokenInfo, ApiInfo.token_id == TokenInfo.token_id
     ).filter(*data.filter_params()).order_by(ApiInfo.api_id.desc()).offset(offset).limit(data.page_size).all()
+
+    api_infos = [item[0] for item in items]
+    tokens_by_api_id = await get_api_tokens_map(db, [api_info.api_id for api_info in api_infos])
+    fallback_token_ids = {
+        api_info.token_id
+        for api_info in api_infos
+        if api_info.token_id and not tokens_by_api_id.get(api_info.api_id)
+    }
+    fallback_tokens = {}
+    if fallback_token_ids:
+        fallback_tokens = {
+            token.token_id: token
+            for token in db.query(TokenInfo).filter(TokenInfo.token_id.in_(fallback_token_ids)).all()
+        }
     
     """将查询结果转换为ApiInfoInfo对象列表"""
     result_list = []
     for item in items:
         api_info = item[0]
-        token_fields = _token_response_fields(api_info, await _get_response_tokens(db, api_info))
+        tokens = tokens_by_api_id.get(api_info.api_id) or []
+        if not tokens and api_info.token_id:
+            token = fallback_tokens.get(api_info.token_id)
+            if token:
+                tokens = [token]
+        token_fields = _token_response_fields(api_info, tokens)
         result_dict = ApiInfoInfo(
             api_id=api_info.api_id,
             api_name=api_info.api_name,
@@ -168,7 +179,7 @@ async def get_api_info_list(
             project_address=item[2],
             token_name=token_fields["token_name"],
             token_names=token_fields["token_names"],
-            token=token_fields["token"]
+            token=None
         )
         result_list.append(result_dict)
     
@@ -177,21 +188,39 @@ async def get_api_info_list(
 
 async def get_api_info_options(db: Session, data: ApiInfoOptionQuery) -> List[ApiInfoOption]:
     items = db.query(
-        ApiInfo.api_id,
-        ApiInfo.api_name,
-        ApiInfo.method_url,
-        ApiInfo.method_type
+        ApiInfo
     ).filter(*data.filter_params()).order_by(ApiInfo.api_id.desc()).all()
-
-    return [
-        ApiInfoOption(
-            api_id=item.api_id,
-            api_name=item.api_name,
-            method_url=item.method_url,
-            method_type=item.method_type
-        )
+    tokens_by_api_id = await get_api_tokens_map(db, [item.api_id for item in items])
+    fallback_token_ids = {
+        item.token_id
         for item in items
-    ]
+        if item.token_id and not tokens_by_api_id.get(item.api_id)
+    }
+    fallback_tokens = {}
+    if fallback_token_ids:
+        fallback_tokens = {
+            token.token_id: token
+            for token in db.query(TokenInfo).filter(TokenInfo.token_id.in_(fallback_token_ids)).all()
+        }
+
+    result = []
+    for item in items:
+        tokens = tokens_by_api_id.get(item.api_id) or []
+        if not tokens and item.token_id:
+            token = fallback_tokens.get(item.token_id)
+            if token:
+                tokens = [token]
+        result.append(
+            ApiInfoOption(
+                api_id=item.api_id,
+                api_name=item.api_name,
+                method_url=item.method_url,
+                method_type=item.method_type,
+                project_id=item.project_id,
+                **_token_response_fields(item, tokens)
+            )
+        )
+    return result
 
 
 

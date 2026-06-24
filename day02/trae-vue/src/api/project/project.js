@@ -13,6 +13,14 @@ export function getProjectList(params) {
   })
 }
 
+export function getProjectSelectOptions(params) {
+  return request({
+    url: '/api/v1/projectInfo/selectOptions',
+    method: 'get',
+    params
+  })
+}
+
 // 获取项目详情
 export function getProjectDetail(id) {
   return request({

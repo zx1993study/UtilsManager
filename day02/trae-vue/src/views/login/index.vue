@@ -48,6 +48,7 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { markTokenValidated } from '@/router'
 import { useUserStore } from '@/stores/user'
 import { login as loginApi } from '@/api/auth'
 import { handleApiResponse } from '@/utils/responseHandler'
@@ -90,6 +91,7 @@ const handleLogin = async () => {
         if (handleApiResponse(res, '登录成功', '用户名或密码错误')) {
           userStore.setToken(res.data.token)
           userStore.setUserInfo(res.data.userInfo)
+          markTokenValidated()
           router.push('/dashboard')
         }
       } catch (error) {

@@ -15,6 +15,13 @@
       @selection-change="handleSelectionChange"
       @reset="handleResetSearch"
     >
+      <template #toolbar-left>
+        <el-button type="warning" @click="handleOpenJsonParseDialog">
+          <el-icon><Document /></el-icon>
+          <span>JSON解析</span>
+        </el-button>
+      </template>
+
       <!-- 自定义搜索区域 -->
       <template #projectSearch>
         <el-form-item label="项目">
@@ -113,6 +120,15 @@
       <el-form-item label="字段大小" prop="fieldSize">
         <el-input v-model="formData.fieldSize" placeholder="请输入字段大小" type="number" />
       </el-form-item>
+
+      <el-form-item label="默认值" prop="defaultValue">
+        <el-input
+          v-model="formData.defaultValue"
+          type="textarea"
+          :rows="3"
+          placeholder="请输入默认值"
+        />
+      </el-form-item>
       
       <el-form-item label="是否必填" prop="isRequired">
         <el-radio-group v-model="formData.isRequired">
@@ -130,6 +146,61 @@
         />
       </el-form-item>
     </common-dialog>
+
+    <common-dialog
+      v-model="jsonParseDialogVisible"
+      title="JSON解析"
+      :form-data="jsonParseForm"
+      :rules="jsonParseRules"
+      :loading="jsonParseLoading"
+      width="760px"
+      @confirm="handleJsonParseSubmit"
+    >
+      <el-form-item label="项目" prop="projectId">
+        <el-select
+          v-model="jsonParseForm.projectId"
+          filterable
+          clearable
+          placeholder="请选择项目"
+          style="width: 100%"
+          @change="handleJsonParseProjectChange"
+        >
+          <el-option
+            v-for="item in projectList"
+            :key="item.projectId"
+            :label="item.projectName"
+            :value="item.projectId"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="API" prop="apiId">
+        <el-select
+          v-model="jsonParseForm.apiId"
+          filterable
+          clearable
+          placeholder="请选择API"
+          style="width: 100%"
+          :disabled="!jsonParseForm.projectId"
+        >
+          <el-option
+            v-for="item in jsonParseApiList"
+            :key="item.apiId"
+            :label="item.apiName"
+            :value="item.apiId"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="JSON" prop="jsonText">
+        <el-input
+          v-model="jsonParseForm.jsonText"
+          type="textarea"
+          :rows="12"
+          placeholder="请输入JSON内容"
+        />
+      </el-form-item>
+    </common-dialog>
   </div>
 </template>
 
@@ -138,6 +209,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Document } from '@element-plus/icons-vue'
 import * as apiTemplateApi from '@/api/api/api-template'
 import * as projectApi from '@/api/project/project'
 import * as apiListApi from '@/api/api/api'
@@ -145,6 +217,9 @@ import { handleApiResponse } from '@/utils/responseHandler'
 
 const tableRef = ref(null)
 const submitLoading = ref(false)
+const jsonParseDialogVisible = ref(false)
+const jsonParseLoading = ref(false)
+const jsonParseApiList = ref([])
 
 // 搜索区域的项目和API列表
 const searchProjectId = ref(null)
@@ -169,6 +244,7 @@ const columns = [
     }
   },
   { prop: 'fieldSize', label: '字段大小', minWidth: 100 },
+  { prop: 'defaultValue', label: '默认值', minWidth: 160, showOverflowTooltip: true },
   { 
     prop: 'isRequired', 
     label: '是否必填', 
@@ -236,10 +312,17 @@ const formData = reactive({
   fieldName: '',
   fieldType: null,
   fieldSize: null,
+  defaultValue: '',
   isRequired: 'N',
   remark: '',
   projectId: null,
   apiId: null
+})
+
+const jsonParseForm = reactive({
+  projectId: null,
+  apiId: null,
+  jsonText: ''
 })
 
 // 项目列表
@@ -251,6 +334,12 @@ const formRules = {
   fieldName: [{ required: true, message: '请输入字段名称', trigger: 'blur' }],
   fieldType: [{ required: true, message: '请选择字段类型', trigger: 'change' }],
   projectId: [{ required: true, message: '请选择项目', trigger: 'change' }]
+}
+
+const jsonParseRules = {
+  projectId: [{ required: true, message: '请选择项目', trigger: 'change' }],
+  apiId: [{ required: true, message: '请选择API', trigger: 'change' }],
+  jsonText: [{ required: true, message: '请输入JSON内容', trigger: 'blur' }]
 }
 
 const handleAdd = async () => {
@@ -270,6 +359,7 @@ const handleEdit = async (row) => {
     fieldName: row.fieldName || '',
     fieldType: row.fieldType ?? null,
     fieldSize: row.fieldSize || null,
+    defaultValue: row.defaultValue || '',
     isRequired: row.isRequired || 'N',
     remark: row.remark || '',
     projectId: row.projectId || null,
@@ -347,6 +437,7 @@ const resetForm = () => {
     fieldName: '',
     fieldType: null,
     fieldSize: null,
+    defaultValue: '',
     isRequired: 'N',
     remark: '',
     projectId: null,
@@ -355,10 +446,29 @@ const resetForm = () => {
   apiList.value = []
 }
 
+const resetJsonParseForm = () => {
+  Object.assign(jsonParseForm, {
+    projectId: null,
+    apiId: null,
+    jsonText: ''
+  })
+  jsonParseApiList.value = []
+}
+
+const extractListData = (res) => {
+  if (res.data?.items) return res.data.items
+  if (res.data?.list) return res.data.list
+  if (Array.isArray(res.data)) return res.data
+  if (res.data?.data) {
+    return res.data.data.items || res.data.data.list || res.data.data || []
+  }
+  return []
+}
+
 // 加载项目列表
 const loadProjectList = async () => {
   try {
-    const res = await projectApi.getProjectList({ pageSize: 1000 })
+    const res = await projectApi.getProjectSelectOptions()
     
     // 尝试多种可能的数据结构
     let projects = []
@@ -415,6 +525,46 @@ const handleProjectChange = async (projectId) => {
 }
 
 // 项目选择变更（搜索区域）
+const handleOpenJsonParseDialog = async () => {
+  resetJsonParseForm()
+  if (projectList.value.length === 0) {
+    await loadProjectList()
+  }
+  jsonParseDialogVisible.value = true
+}
+
+const handleJsonParseProjectChange = async (projectId) => {
+  jsonParseForm.apiId = null
+  jsonParseApiList.value = []
+  if (!projectId) return
+  try {
+    const res = await apiListApi.getApiOptions({ projectId })
+    jsonParseApiList.value = extractListData(res)
+  } catch (error) {
+    console.error('加载API下拉列表失败:', error)
+    ElMessage.error('加载API下拉列表失败')
+  }
+}
+
+const handleJsonParseSubmit = async () => {
+  jsonParseLoading.value = true
+  try {
+    const res = await apiTemplateApi.parseJsonTemplate({
+      apiId: jsonParseForm.apiId,
+      jsonText: jsonParseForm.jsonText
+    })
+    if (handleApiResponse(res, res.msg || 'JSON解析成功', 'JSON解析失败')) {
+      jsonParseDialogVisible.value = false
+      tableRef.value?.refresh()
+    }
+  } catch (error) {
+    console.error('JSON解析失败:', error)
+    ElMessage.error('JSON解析失败')
+  } finally {
+    jsonParseLoading.value = false
+  }
+}
+
 const handleSearchProjectChange = async (projectId) => {
   searchApiId.value = null
   searchApiList.value = []

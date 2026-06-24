@@ -57,19 +57,19 @@ export function batchDeleteTestcase(ids) {
 }
 
 // 执行测试用例
-export function executeTestcase(id) {
+export function executeTestcase(id, tokenId = null) {
   return request({
     url: `/api/v1/apiExecute/execute`,
     method: 'post',
-    data: { executionType: 1, targetId: id }
+    data: { executionType: 1, targetId: id, tokenId }
   })
 }
 
 // 批量执行测试用例
-export function batchExecuteTestcase(ids) {
+export function batchExecuteTestcase(ids, tokenId = null) {
   return request({
     url: '/api/v1/apiExecute/execute',
     method: 'post',
-    data: { executionType: 2, targetIds: ids }
+    data: { executionType: 2, targetIds: ids, tokenId }
   })
 }

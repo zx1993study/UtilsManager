@@ -17,6 +17,8 @@ from mysql.api_instance_sql import delete_api_instance_by_api_id
 from mysql.api_template_sql import delete_api_template_by_api_id
 from mysql.api_result_sql import delete_api_result_by_api_id
 from mysql.api_token_info_sql import delete_api_token_infos_by_api_id, set_api_token_infos
+from mysql.flow_step_sql import delete_flow_steps_by_api_id, delete_flow_steps_by_instance_ids
+from models.api_instance_model import ApiInstance
 from utils.pagination import create_page_response
 from core.responsemsg import success_response, error_response
 from core.logger import logger
@@ -159,7 +161,15 @@ async def delete_api_info_service(db: Session, item_id: int):
         )
     
     """2. 级联删除关联的实例、模板和结果"""
+    instance_ids = [
+        item[0]
+        for item in db.query(ApiInstance.instance_id)
+        .filter(ApiInstance.api_id == item_id)
+        .all()
+    ]
     await delete_api_result_by_api_id(db, item_id)
+    await delete_flow_steps_by_instance_ids(db, instance_ids)
+    await delete_flow_steps_by_api_id(db, item_id)
     await delete_api_instance_by_api_id(db, item_id)
     await delete_api_template_by_api_id(db, item_id)
     await delete_api_token_infos_by_api_id(db, item_id)

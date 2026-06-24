@@ -19,6 +19,8 @@ class ElementTemplateBase(BaseModel):
     page_id: Optional[int] = Field(None, description="页面ID")
     locator_type: Optional[int] = Field(None, description="定位器类型")
     element_value: Optional[str] = Field(None, description="元素定位值")
+    default_value: Optional[str] = Field(None, description="默认值")
+    parent_element: Optional[str] = Field(None, description="父元素")
     element_type: Optional[int] = Field(None, description="元素类型")
     status: Optional[int] = Field(None, description="状态")
     operation: Optional[int] = Field(None, description="操作")

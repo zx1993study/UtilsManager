@@ -150,6 +150,36 @@ async def get_token_info_options(
     ]
 
 
+async def get_token_info_select_options(
+    db: Session,
+    project_id: Optional[int] = None,
+    token_type: Optional[int] = None,
+    name: Optional[str] = None
+) -> List[dict]:
+    """获取轻量Token下拉列表，不返回分页信息和token值。"""
+    query = db.query(
+        TokenInfo.token_id,
+        TokenInfo.name,
+        TokenInfo.token_type
+    )
+    if project_id is not None:
+        query = query.filter(TokenInfo.project_id == project_id)
+    if token_type is not None:
+        query = query.filter(TokenInfo.token_type == token_type)
+    if name:
+        query = query.filter(TokenInfo.name.contains(name))
+
+    rows = query.order_by(TokenInfo.token_id.desc()).all()
+    return [
+        {
+            "tokenId": row.token_id,
+            "tokenName": row.name,
+            "tokenType": row.token_type,
+        }
+        for row in rows
+    ]
+
+
 async def create_token_info(db: Session, data: dict) -> TokenInfo:
     """创建Token信息"""
     db_obj = TokenInfo(**data)

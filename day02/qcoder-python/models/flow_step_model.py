@@ -15,6 +15,7 @@ class FlowStep(Base):
     flow_id = Column(BigInteger, comment="流程id")
     api_id = Column(BigInteger, comment="接口id")
     instance_id = Column(BigInteger, comment="实例id")
+    token_id = Column(BigInteger, comment="tokenId")
     params = Column(Text, comment="参数")
     flow_type = Column(SmallInteger, comment="流程类型")
     is_batch = Column(String(10), comment="是否批处理")

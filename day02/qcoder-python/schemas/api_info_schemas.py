@@ -71,6 +71,11 @@ class ApiInfoOption(BaseModel):
     api_name: Optional[str] = Field(None, description="接口名称")
     method_url: Optional[str] = Field(None, description="方法URL")
     method_type: Optional[int] = Field(None, description="方法类型")
+    project_id: Optional[int] = Field(None, description="项目id")
+    token_id: Optional[int] = Field(None, description="tokenId")
+    token_ids: Optional[list[int]] = Field(None, description="tokenIds")
+    token_name: Optional[str] = Field(None, description="Token名称")
+    token_names: Optional[list[str]] = Field(None, description="tokenNames")
 
 class ApiInfoCreate(ApiInfoBase):
     """接口信息创建Schema"""

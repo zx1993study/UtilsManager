@@ -72,10 +72,10 @@ export function getLatestResultByInstanceId(instanceId) {
 }
 
 // 执行API（通过instanceId）
-export function executeApi(instanceId) {
+export function executeApi(instanceId, tokenId = null) {
   return request({
     url: '/api/v1/apiExecute/execute',
     method: 'post',
-    data: { executionType: 1, targetId: instanceId }
+    data: { executionType: 1, targetId: instanceId, tokenId }
   })
 }

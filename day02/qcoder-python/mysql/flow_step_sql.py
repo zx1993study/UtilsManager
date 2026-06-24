@@ -7,6 +7,7 @@ from sqlalchemy import and_, func, select
 from models.flow_step_model import FlowStep
 from models.api_info_model import ApiInfo
 from models.api_instance_model import ApiInstance
+from models.token_info_model import TokenInfo
 from typing import List, Optional, Tuple
 from schemas.flow_step_schemas import FlowStepList
 
@@ -17,11 +18,14 @@ async def get_flow_step_by_id(db: Session, step_id: int) -> Optional[dict]:
         FlowStep,
         ApiInfo.api_name,
         ApiInfo.method_url,
-        ApiInstance.instance_name
+        ApiInstance.instance_name,
+        TokenInfo.name.label("token_name")
     ).join(
         ApiInfo, FlowStep.api_id == ApiInfo.api_id
     ).outerjoin(
         ApiInstance, FlowStep.instance_id == ApiInstance.instance_id
+    ).outerjoin(
+        TokenInfo, FlowStep.token_id == TokenInfo.token_id
     ).filter(FlowStep.step_id == step_id).first()
     
     if not item:
@@ -33,6 +37,7 @@ async def get_flow_step_by_id(db: Session, step_id: int) -> Optional[dict]:
         'flow_id': flow_step.flow_id,
         'api_id': flow_step.api_id,
         'instance_id': flow_step.instance_id,
+        'token_id': flow_step.token_id,
         'params': flow_step.params,
         'flow_type': flow_step.flow_type,
         'is_batch': flow_step.is_batch,
@@ -44,7 +49,8 @@ async def get_flow_step_by_id(db: Session, step_id: int) -> Optional[dict]:
         'update_time': flow_step.update_time,
         'api_name': item[1],
         'method_url': item[2],
-        'instance_name': item[3]
+        'instance_name': item[3],
+        'token_name': item[4]
     }
 
 
@@ -105,11 +111,14 @@ async def get_flow_step_list(
         FlowStep,
         ApiInfo.api_name,
         ApiInfo.method_url,
-        ApiInstance.instance_name
+        ApiInstance.instance_name,
+        TokenInfo.name.label("token_name")
     ).join(
         ApiInfo, FlowStep.api_id == ApiInfo.api_id
     ).outerjoin(
         ApiInstance, FlowStep.instance_id == ApiInstance.instance_id
+    ).outerjoin(
+        TokenInfo, FlowStep.token_id == TokenInfo.token_id
     )
     
     if conditions:
@@ -127,6 +136,7 @@ async def get_flow_step_list(
             'flow_id': flow_step.flow_id,
             'api_id': flow_step.api_id,
             'instance_id': flow_step.instance_id,
+            'token_id': flow_step.token_id,
             'params': flow_step.params,
             'flow_type': flow_step.flow_type,
             'is_batch': flow_step.is_batch,
@@ -138,7 +148,8 @@ async def get_flow_step_list(
             'update_time': flow_step.update_time,
             'api_name': row[1],
             'method_url': row[2],
-            'instance_name': row[3]
+            'instance_name': row[3],
+            'token_name': row[4]
         })
     
     return items, total
@@ -179,11 +190,14 @@ async def get_flow_steps_by_flow_id(db: Session, flow_id: int) -> List[dict]:
         FlowStep,
         ApiInfo.api_name,
         ApiInfo.method_url,
-        ApiInstance.instance_name
+        ApiInstance.instance_name,
+        TokenInfo.name.label("token_name")
     ).join(
         ApiInfo, FlowStep.api_id == ApiInfo.api_id
     ).outerjoin(
         ApiInstance, FlowStep.instance_id == ApiInstance.instance_id
+    ).outerjoin(
+        TokenInfo, FlowStep.token_id == TokenInfo.token_id
     ).filter(FlowStep.flow_id == flow_id).order_by(FlowStep.step_id.asc()).all()
     
     result = []
@@ -194,6 +208,7 @@ async def get_flow_steps_by_flow_id(db: Session, flow_id: int) -> List[dict]:
             'flow_id': flow_step.flow_id,
             'api_id': flow_step.api_id,
             'instance_id': flow_step.instance_id,
+            'token_id': flow_step.token_id,
             'params': flow_step.params,
             'flow_type': flow_step.flow_type,
             'is_batch': flow_step.is_batch,
@@ -205,7 +220,8 @@ async def get_flow_steps_by_flow_id(db: Session, flow_id: int) -> List[dict]:
             'update_time': flow_step.update_time,
             'api_name': row[1],
             'method_url': row[2],
-            'instance_name': row[3]
+            'instance_name': row[3],
+            'token_name': row[4]
         })
     
     return result
@@ -214,4 +230,18 @@ async def get_flow_steps_by_flow_id(db: Session, flow_id: int) -> List[dict]:
 async def delete_flow_steps_by_flow_id(db: Session, flow_id: int):
     """根据流程ID批量删除步骤"""
     db.query(FlowStep).filter(FlowStep.flow_id == flow_id).delete(synchronize_session=False)
+    db.commit()
+
+
+async def delete_flow_steps_by_api_id(db: Session, api_id: int):
+    """根据 API ID 删除流程步骤。"""
+    db.query(FlowStep).filter(FlowStep.api_id == api_id).delete(synchronize_session=False)
+    db.commit()
+
+
+async def delete_flow_steps_by_instance_ids(db: Session, instance_ids: list[int]):
+    """根据 API 实例 ID 列表删除流程步骤。"""
+    if not instance_ids:
+        return
+    db.query(FlowStep).filter(FlowStep.instance_id.in_(instance_ids)).delete(synchronize_session=False)
     db.commit()

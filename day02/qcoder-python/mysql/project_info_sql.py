@@ -54,6 +54,21 @@ async def get_project_info_list(
     return items, total
 
 
+async def get_project_info_select_options(db: Session) -> List[dict]:
+    """获取轻量项目下拉列表。"""
+    rows = db.query(
+        ProjectInfo.project_id,
+        ProjectInfo.project_name
+    ).order_by(ProjectInfo.project_id.desc()).all()
+    return [
+        {
+            "projectId": row.project_id,
+            "projectName": row.project_name,
+        }
+        for row in rows
+    ]
+
+
 async def create_project_info(db: Session, data: dict) -> ProjectInfo:
     """创建项目信息"""
     """自动设置审计字段（创建时间、更新时间）"""

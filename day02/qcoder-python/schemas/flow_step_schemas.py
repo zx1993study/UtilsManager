@@ -19,6 +19,7 @@ class FlowStepBase(BaseModel):
     flow_id: Optional[int] = Field(None, description="流程ID")
     api_id: Optional[int] = Field(None, description="接口id")
     instance_id: Optional[int] = Field(None, description="实例id")
+    token_id: Optional[int] = Field(None, description="tokenId")
     params: Optional[str] = Field(None, description="参数(instanceJson)")
     flow_type: Optional[int] = Field(1, description="流程类型，1为API流程")
     is_batch: Optional[str] = Field(None, description="是否批处理")
@@ -59,6 +60,7 @@ class FlowStepInfo(FlowStepBase):
     api_name: Optional[str] = Field(None, description="API名称")
     method_url: Optional[str] = Field(None, description="API URL")
     instance_name: Optional[str] = Field(None, description="实例名称")
+    token_name: Optional[str] = Field(None, description="Token名称")
 
     @field_serializer('create_time', 'update_time')
     def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:

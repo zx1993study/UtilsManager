@@ -80,6 +80,7 @@ async def get_api_template_list(
             'field_name': template.field_name,
             'field_type': template.field_type,
             'field_size': template.field_size,
+            'default_value': template.default_value,
             'is_required': template.is_required,
             'api_id': template.api_id,
             'remark': template.remark,
@@ -146,6 +147,17 @@ async def delete_api_template(db: Session, template_id: int) -> Optional[ApiTemp
         db.delete(db_obj)
         db.commit()
     return db_obj
+
+
+async def delete_api_template_batch(db: Session, template_ids: List[int]) -> int:
+    """批量删除接口参数模板"""
+    if not template_ids:
+        return 0
+    deleted = db.query(ApiTemplate).filter(
+        ApiTemplate.template_id.in_(template_ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return deleted
 
 
 async def delete_api_template_by_api_id(db: Session, api_id: int):

@@ -6,13 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from core.db import get_db
-from schemas.api_template_schemas import ApiTemplateCreate, ApiTemplateUpdate, ApiTemplateInfo, ApiTemplateList
+from schemas.api_template_schemas import ApiTemplateCreate, ApiTemplateUpdate, ApiTemplateInfo, ApiTemplateList, ApiTemplateJsonParse, ApiTemplateBatchDelete
 from service.api_template_service import (
     get_api_template_service,
     get_api_template_list_service,
     create_api_template_service,
     update_api_template_service,
     delete_api_template_service,
+    delete_api_template_batch_service,
+    parse_api_template_json_service,
     export_api_templates_service
 )
 
@@ -46,6 +48,15 @@ async def create_api_template(
     return await create_api_template_service(db, data)
 
 
+@router.post("/apiTemplate/parseJson", response_model=dict)
+async def parse_api_template_json(
+    data: ApiTemplateJsonParse,
+    db: Session = Depends(get_db)
+):
+    """解析JSON并生成参数模板"""
+    return await parse_api_template_json_service(db, data)
+
+
 @router.put("/apiTemplate", response_model=dict)
 async def update_api_template(
     data: ApiTemplateUpdate,
@@ -53,6 +64,15 @@ async def update_api_template(
 ):
     """更新接口模板"""
     return await update_api_template_service(db,  data)
+
+
+@router.delete("/apiTemplate/batch", response_model=dict)
+async def delete_api_template_batch(
+    data: ApiTemplateBatchDelete,
+    db: Session = Depends(get_db)
+):
+    """批量删除接口参数模板"""
+    return await delete_api_template_batch_service(db, data)
 
 
 @router.delete("/apiTemplate/{item_id}", response_model=dict)

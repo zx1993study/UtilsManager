@@ -243,6 +243,10 @@
                 <el-icon><Plus /></el-icon>
                 <span>添加</span>
               </el-button>
+              <el-button type="warning" @click="handleOpenGenerateDialog">
+                <el-icon><Plus /></el-icon>
+                <span>自动生成</span>
+              </el-button>
             </div>
 
             <common-table
@@ -264,8 +268,11 @@
               @row-click="handleViewInstance"
             >
               <template #status="{ row }">
-                <el-tag :type="row.status === 1 ? 'success' : 'danger'">
+                <el-tag :type="getInstanceStatusType(row.status)">
+                  {{ getInstanceStatusText(row.status) }}
+                  <span v-if="false">
                   {{ row.status === 1 ? '执行成功' : '执行失败' }}
+                  </span>
                 </el-tag>
               </template>
 
@@ -342,7 +349,13 @@
             >
               <div class="operation-meta">
                 <el-tag size="small" effect="plain">#{{ item.elementId }}</el-tag>
-                <span class="operation-name">{{ item.elementName }}</span>
+                <input
+                  v-if="item.nameEditable"
+                  :value="getOperationDisplayName(item)"
+                  class="operation-name operation-name-input"
+                  @input="updateOperationName(item, $event.target.value)"
+                />
+                <span v-else class="operation-name">{{ item.elementName }}</span>
                 <el-tag size="small" type="info" effect="plain">{{ item.elementTypeLabel }}</el-tag>
                 <el-tag size="small" type="success" effect="plain">{{ item.operationLabel }}</el-tag>
                 <el-tooltip content="步骤后截图" placement="top">
@@ -356,7 +369,7 @@
                   </el-button>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="['text', 'textarea'].includes(item.valueMode)"
+                  v-if="item.valueMode === 'textarea'"
                   content="值追加执行次数+1"
                   placement="top"
                 >
@@ -430,23 +443,13 @@
 
               <el-input-number
                 v-else-if="item.valueMode === 'number'"
-                v-model="item.value"
+                v-model="item.nthValue"
                 :min="0"
                 controls-position="right"
                 class="operation-control"
                 @change="syncOperationJsonFromItems"
               />
 
-              <el-input
-                v-else-if="item.valueMode === 'text'"
-                v-model="item.value"
-                placeholder="无需参数，可按需填写"
-                class="operation-control"
-                @input="syncOperationJsonFromItems"
-              />
-              <div v-if="item.valueMode === 'text'" class="operation-text-length">
-                总长度：{{ getTextLength(item.value) }}
-              </div>
             </div>
           </div>
           <el-empty v-else description="暂无元素模板" />
@@ -470,7 +473,7 @@
         <el-input v-model="instanceForm.remark" type="textarea" :rows="3" placeholder="请输入备注" />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-radio-group v-model="instanceForm.status">
+        <el-radio-group v-show="false" v-model="instanceForm.status">
           <el-radio :label="1">执行成功</el-radio>
           <el-radio :label="0">执行失败</el-radio>
         </el-radio-group>
@@ -520,11 +523,154 @@
           placeholder='可保存参数key，例如 {"paramKey":"username","defaultValue":"admin"}'
         />
       </el-form-item>
+      <el-form-item label="默认值" prop="defaultValue">
+        <el-input
+          v-model="elementForm.defaultValue"
+          type="textarea"
+          :rows="3"
+          placeholder="请输入默认值"
+        />
+      </el-form-item>
+      <el-form-item label="父元素" prop="parentElement">
+        <el-input
+          v-model="elementForm.parentElement"
+          type="textarea"
+          :rows="4"
+          placeholder='例如 {"parents":[],"nth":0}'
+        />
+      </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-radio-group v-model="elementForm.status">
           <el-radio :label="1">启用</el-radio>
           <el-radio :label="0">禁用</el-radio>
         </el-radio-group>
+      </el-form-item>
+    </common-dialog>
+
+    <common-dialog
+      v-model="generateDialogVisible"
+      title="自动生成页面用例"
+      :form-data="generateForm"
+      :loading="generateSaving"
+      width="900px"
+      @confirm="handleSaveGeneratedCases"
+    >
+      <el-form-item label="识别类型">
+        <el-select
+          v-model="generateForm.operationType"
+          clearable
+          placeholder="自动识别"
+          style="width: 180px"
+          @change="clearGeneratePreview"
+        >
+          <el-option v-for="item in operationTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-checkbox v-model="generateForm.overwrite" class="generate-overwrite">覆盖同名用例</el-checkbox>
+        <el-button type="primary" :loading="generateLoading" @click="handlePreviewGeneratedCases">
+          预览生成
+        </el-button>
+      </el-form-item>
+      <el-form-item label="元素名称">
+        <el-select
+          v-model="generateForm.templateIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          filterable
+          clearable
+          placeholder="默认全部元素"
+          style="width: 100%"
+          @change="clearGeneratePreview"
+        >
+          <el-option
+            v-for="item in generateElementOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          >
+            <span>{{ item.label }}</span>
+            <span class="generate-option-extra">{{ item.typeLabel }}</span>
+          </el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="异常类型">
+        <el-select
+          v-model="generateForm.exceptionIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          filterable
+          clearable
+          placeholder="默认按识别类型匹配"
+          style="width: 100%"
+          @change="clearGeneratePreview"
+        >
+          <el-option
+            v-for="item in exceptionCaseOptions"
+            :key="item.exceptionId"
+            :label="buildExceptionLabel(item)"
+            :value="item.exceptionId"
+          />
+        </el-select>
+      </el-form-item>
+      <el-alert
+        v-if="generatePreview"
+        :title="`识别结果：${generatePreview.operationTypeName}，共 ${generatePreview.total} 条，已存在 ${generatePreview.existsCount} 条`"
+        type="info"
+        show-icon
+        :closable="false"
+      />
+      <el-table :data="generatePreviewItems" border stripe max-height="420" class="generate-preview-table">
+        <el-table-column prop="caseName" label="用例名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="targetId" label="页面ID" width="80" />
+        <el-table-column prop="templateId" label="元素ID" width="80" />
+        <el-table-column prop="templateName" label="元素" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="exceptionId" label="异常ID" width="80" />
+        <el-table-column prop="exceptionName" label="异常类型" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="operationTypeName" label="操作类型" width="100" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.exists ? 'warning' : 'success'">{{ row.exists ? '已存在' : '新增' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作JSON" min-width="220">
+          <template #default="{ row }">
+            <pre class="json-mini">{{ formatJson(row.payload) }}</pre>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row, $index }">
+            <el-button type="primary" size="small" link @click="handleEditGeneratedCase(row, $index)">编辑</el-button>
+            <el-button type="danger" size="small" link @click="handleDeleteGeneratedCase($index)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </common-dialog>
+
+    <common-dialog
+      v-model="generatedCaseDialogVisible"
+      :title="generatedCaseDialogTitle"
+      :form-data="generatedCaseForm"
+      :rules="generatedCaseRules"
+      width="760px"
+      @confirm="handleGeneratedCaseSubmit"
+    >
+      <el-form-item label="用例名称" prop="caseName">
+        <el-input v-model="generatedCaseForm.caseName" maxlength="50" show-word-limit placeholder="请输入用例名称" />
+      </el-form-item>
+      <el-form-item label="元素名称" prop="templateName">
+        <el-input v-model="generatedCaseForm.templateName" placeholder="请输入元素名称" />
+      </el-form-item>
+      <el-form-item label="异常类型" prop="exceptionName">
+        <el-input v-model="generatedCaseForm.exceptionName" placeholder="请输入异常类型名称" />
+      </el-form-item>
+      <el-form-item label="操作类型" prop="operationType">
+        <el-select v-model="generatedCaseForm.operationType" placeholder="请选择操作类型" style="width: 100%" @change="handleGeneratedCaseOperationChange">
+          <el-option v-for="item in operationTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="操作JSON" prop="payloadText">
+        <el-input v-model="generatedCaseForm.payloadText" type="textarea" :rows="10" placeholder="请输入操作JSON" />
       </el-form-item>
     </common-dialog>
   </div>
@@ -557,6 +703,8 @@ import { getLatestPageResultByInstance } from '@/api/page/page-result'
 import * as apiInfoApi from '@/api/api/api'
 import * as apiTestcaseApi from '@/api/api/api-testcase'
 import * as apiResultApi from '@/api/api/api-result'
+import * as caseGenerateApi from '@/api/case-generate'
+import * as exceptionCaseTypeApi from '@/api/system/exception-case-type'
 import { handleApiResponse } from '@/utils/responseHandler'
 import { normalizeJsonObject } from '@/utils/json'
 
@@ -575,6 +723,15 @@ const batchRunning = ref(false)
 const leftActiveTab = ref('elements')
 const rightActiveTab = ref('instances')
 const submitLoading = ref(false)
+const generateDialogVisible = ref(false)
+const generateLoading = ref(false)
+const generateSaving = ref(false)
+const generatePreview = ref(null)
+const generatePreviewItems = ref([])
+const exceptionCaseOptions = ref([])
+const generatedCaseDialogVisible = ref(false)
+const generatedCaseDialogTitle = ref('')
+const generatedCaseEditIndex = ref(-1)
 const instanceDialogVisible = ref(false)
 const instanceDialogTitle = ref('')
 const instanceMode = ref('add')
@@ -592,6 +749,25 @@ const apiDropdown = reactive({
   running: false,
   apiOptions: [],
   caseOptions: []
+})
+const generateForm = reactive({
+  operationType: null,
+  templateIds: [],
+  exceptionIds: [],
+  overwrite: false
+})
+
+const generatedCaseForm = reactive({
+  caseName: '',
+  targetId: null,
+  templateId: null,
+  templateName: '',
+  exceptionId: null,
+  exceptionName: '',
+  operationType: null,
+  operationTypeName: '',
+  payloadText: '',
+  exists: false
 })
 
 const pageInfo = reactive({
@@ -619,7 +795,7 @@ const instanceForm = reactive({
   expectResult: '',
   description: '',
   remark: '',
-  status: 1
+  status: 0
 })
 
 const instanceRules = {
@@ -628,12 +804,19 @@ const instanceRules = {
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
+const generatedCaseRules = {
+  caseName: [{ required: true, message: '请输入用例名称', trigger: 'blur' }],
+  payloadText: [{ required: true, message: '请输入操作JSON', trigger: 'blur' }]
+}
+
 const elementForm = reactive({
   elementId: null,
   elementName: '',
   pageId,
   locatorType: 5,
   elementValue: '',
+  defaultValue: '',
+  parentElement: '',
   elementType: 1,
   operation: 1,
   remark: '',
@@ -658,6 +841,16 @@ const instanceColumns = [
   { prop: 'status', label: '状态', width: 90, slot: 'status' }
 ]
 
+const getInstanceStatusType = (status) => {
+  const map = { 0: 'info', 1: 'success', 2: 'danger' }
+  return map[Number(status)] || 'info'
+}
+
+const getInstanceStatusText = (status) => {
+  const map = { 0: '未执行', 1: '执行成功', 2: '执行失败' }
+  return map[Number(status)] || '未知'
+}
+
 const locatorTypeOptions = [
   { label: 'role', value: 1 },
   { label: 'placeholder', value: 2 },
@@ -681,17 +874,33 @@ const operationOptions = [
   { label: '上传文件', value: 4 }
 ]
 
+const operationTypeOptions = [
+  { label: '添加', value: 1 },
+  { label: '编辑', value: 2 },
+  { label: '删除', value: 3 },
+  { label: '登录', value: 4 },
+  { label: '搜索', value: 5 }
+]
+
 const elementColumns = [
   { prop: 'elementId', label: '序号', width: 90 },
   { prop: 'elementName', label: '元素名称', minWidth: 120 },
   { prop: 'locatorType', label: '定位器', width: 120, slot: 'locatorType' },
   { prop: 'elementType', label: '元素类型', width: 110, slot: 'elementType' },
   { prop: 'elementValue', label: '定位值', minWidth: 220, showOverflowTooltip: true },
+  { prop: 'defaultValue', label: '默认值', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'parentElement', label: '父元素', minWidth: 180, showOverflowTooltip: true },
   { prop: 'remark', label: '备注', minWidth: 160, showOverflowTooltip: true }
 ]
 
 const getOptionLabel = (options, value) => {
   return options.find(item => item.value === value)?.label || value || '-'
+}
+
+const getOperationTypeName = (value) => {
+  const numberValue = Number(value)
+  if (numberValue === 0) return '通用'
+  return operationTypeOptions.find(item => item.value === numberValue)?.label || '未知'
 }
 
 const screenshotList = computed(() => latestResult.value?.screenshotPath || [])
@@ -920,6 +1129,38 @@ const hasNthRemark = (remark) => {
   return !!remark && typeof remark === 'object' && Object.prototype.hasOwnProperty.call(remark, 'nth')
 }
 
+const getTemplateParentElement = (item) => {
+  return item.parentElement || item.parent_element || ''
+}
+
+const getTemplateParentMeta = (item) => {
+  const parentElement = getTemplateParentElement(item)
+  if (!parentElement) {
+    return null
+  }
+  try {
+    return typeof parentElement === 'string' ? JSON.parse(parentElement) : parentElement
+  } catch (error) {
+    return null
+  }
+}
+
+const hasTemplateNth = (item, remark) => {
+  const parentMeta = getTemplateParentMeta(item)
+  if (parentMeta && typeof parentMeta === 'object' && Object.prototype.hasOwnProperty.call(parentMeta, 'nth')) {
+    return true
+  }
+  return hasNthRemark(remark)
+}
+
+const getTemplateNthValue = (item, remark) => {
+  const parentMeta = getTemplateParentMeta(item)
+  if (parentMeta && typeof parentMeta === 'object' && Object.prototype.hasOwnProperty.call(parentMeta, 'nth')) {
+    return parentMeta.nth
+  }
+  return getNthRemarkValue(remark)
+}
+
 const getNthRemarkValue = (remark) => {
   if (Array.isArray(remark)) {
     const item = remark.find(row => row && Object.prototype.hasOwnProperty.call(row, 'nth'))
@@ -948,6 +1189,10 @@ const isButtonTemplate = (item) => {
 }
 
 const getTemplateDefaultValue = (item) => {
+  const defaultValue = item.defaultValue ?? item.default_value
+  if (defaultValue !== undefined && defaultValue !== null && defaultValue !== '') {
+    return defaultValue
+  }
   const remark = parseRemark(item.remark)
   if (remark && typeof remark === 'object' && !Array.isArray(remark)) {
     return remark.defaultValue ?? ''
@@ -958,6 +1203,16 @@ const getTemplateDefaultValue = (item) => {
 const isEditableOperation = (item) => {
   return [1, 2, 3, 4].includes(getTemplateOperation(item))
 }
+
+const generateElementOptions = computed(() => {
+  return (elementTemplates.value || [])
+    .filter(item => getTemplateId(item) && isEditableOperation(item))
+    .map(item => ({
+      label: `${getTemplateName(item)}#${getTemplateId(item)}`,
+      value: getTemplateId(item),
+      typeLabel: getOptionLabel(elementTypeOptions, getTemplateElementType(item))
+    }))
+})
 
 const isSelectOptionTemplate = (item) => {
   const operation = getTemplateOperation(item)
@@ -982,6 +1237,20 @@ const uniqueValues = (values) => {
   return result
 }
 
+const hasOwnValue = (source, key) => {
+  return !!key && Object.prototype.hasOwnProperty.call(source, key)
+}
+
+const normalizeArraySourceValue = (value, fallbackValues = []) => {
+  if (Array.isArray(value)) {
+    return uniqueValues(value)
+  }
+  if (value !== null && value !== undefined && String(value).trim() !== '') {
+    return uniqueValues([value])
+  }
+  return uniqueValues(fallbackValues)
+}
+
 const formatArrayValue = (value) => {
   return (Array.isArray(value) ? value : [value].filter(Boolean)).join('，')
 }
@@ -998,6 +1267,17 @@ const updateArrayValue = (item, value) => {
   syncOperationJsonFromItems()
 }
 
+const getOperationDisplayName = (item) => {
+  const value = item.value === null || item.value === undefined ? '' : String(item.value)
+  return value || item.elementName || ''
+}
+
+const updateOperationName = (item, value) => {
+  const text = String(value || '').trim()
+  item.value = text && text !== item.elementName ? text : ''
+  syncOperationJsonFromItems()
+}
+
 const getTextLength = (value) => {
   if (value === null || value === undefined) return 0
   return String(value).length
@@ -1009,6 +1289,7 @@ const buildOperationJsonFromItems = () => {
   const skipElements = []
   const valueMarks = {}
   const repeatElements = {}
+  const nthElements = {}
   operationJsonItems.value.forEach(item => {
     if (item.deleted) {
       skipElements.push(...item.elementIds)
@@ -1017,7 +1298,14 @@ const buildOperationJsonFromItems = () => {
     if (item.screenAfter) {
       screenAfter.push(...item.elementIds)
     }
-    if (item.paramKey && item.valueMode !== 'none') {
+    const hasCustomEditableName = item.nameEditable &&
+      item.value !== null &&
+      item.value !== undefined &&
+      String(item.value).trim() !== ''
+    const shouldWriteValue = item.paramKey && (item.valueMode !== 'none' || hasCustomEditableName) && (
+      item.valueMode !== 'text' || hasCustomEditableName
+    )
+    if (shouldWriteValue) {
       result[item.paramKey] = Array.isArray(item.value)
         ? uniqueValues(item.value)
         : item.value
@@ -1028,6 +1316,11 @@ const buildOperationJsonFromItems = () => {
     if ((item.repeatCount || 1) > 1) {
       item.elementIds.forEach(elementId => {
         repeatElements[String(elementId)] = item.repeatCount
+      })
+    }
+    if (item.nthValue !== null && item.nthValue !== undefined && String(item.nthValue).trim() !== '') {
+      item.elementIds.forEach(elementId => {
+        nthElements[String(elementId)] = Number(item.nthValue)
       })
     }
   })
@@ -1049,6 +1342,9 @@ const buildOperationJsonFromItems = () => {
   if (Object.keys(repeatElements).length) {
     result.repeatElements = repeatElements
   }
+  if (Object.keys(nthElements).length) {
+    result.nthElements = nthElements
+  }
   return JSON.stringify(result, null, 2)
 }
 
@@ -1068,10 +1364,15 @@ const syncOperationItemsFromJson = () => {
     const skipElements = new Set((parsed.skipElements || []).map(value => String(value)))
     const valueMarks = parsed.valueMarks || {}
     const repeatElements = parsed.repeatElements || {}
+    const nthElements = parsed.nthElements || {}
     item.screenAfter = item.elementIds.some(elementId => screenAfter.has(String(elementId)))
     item.deleted = item.elementIds.every(elementId => skipElements.has(String(elementId)))
     item.execCountSuffix = item.paramKey ? valueMarks[item.paramKey] === 'execCountSuffix' : false
     item.repeatCount = Number(item.elementIds.map(elementId => repeatElements[String(elementId)]).find(Boolean) || 1)
+    item.nthValue = item.elementIds.map(elementId => nthElements[String(elementId)]).find(value => value !== undefined)
+    if (item.nthValue === undefined) {
+      item.nthValue = item.defaultNthValue
+    }
     if (item.paramKey && Object.prototype.hasOwnProperty.call(parsed, item.paramKey)) {
       item.value = item.valueMode === 'array'
         ? uniqueValues(Array.isArray(parsed[item.paramKey]) ? parsed[item.paramKey] : [parsed[item.paramKey]].filter(Boolean))
@@ -1118,6 +1419,7 @@ const buildOperationJsonItems = (sourceJson = '') => {
   const skipElements = new Set((source.skipElements || []).map(value => String(value)))
   const valueMarks = source.valueMarks || {}
   const repeatElements = source.repeatElements || {}
+  const nthElements = source.nthElements || {}
   const editableTemplates = elementTemplates.value.filter(isEditableOperation)
   for (let index = 0; index < editableTemplates.length; index += 1) {
     const template = editableTemplates[index]
@@ -1131,8 +1433,12 @@ const buildOperationJsonItems = (sourceJson = '') => {
     if (isSelectOptionTemplate(template)) {
       const previous = items[items.length - 1]
       if (previous?.valueMode === 'array' && previous.groupOpen) {
-        previous.value = uniqueValues([...previous.value, elementName])
         previous.options = uniqueValues([...previous.options, elementName])
+        if (hasOwnValue(source, previous.paramKey)) {
+          previous.value = normalizeArraySourceValue(source[previous.paramKey], previous.value)
+        } else {
+          previous.value = uniqueValues([...previous.value, elementName])
+        }
         previous.elementIds.push(elementId)
         previous.screenAfter = previous.elementIds.some(id => screenAfter.has(String(id)))
         previous.deleted = previous.elementIds.every(id => skipElements.has(String(id)))
@@ -1143,7 +1449,7 @@ const buildOperationJsonItems = (sourceJson = '') => {
         previous.elementTypeLabel = '下拉框'
         previous.operationLabel = '选择'
         previous.valueMode = 'array'
-        previous.value = uniqueValues(Array.isArray(rawValue) ? rawValue : [elementName])
+        previous.value = normalizeArraySourceValue(rawValue, [elementName])
         previous.options = uniqueValues([elementName])
         previous.elementIds = [...new Set([...previous.elementIds, elementId])]
         previous.groupOpen = true
@@ -1166,7 +1472,7 @@ const buildOperationJsonItems = (sourceJson = '') => {
           elementTypeLabel: '下拉框',
           operationLabel: '选择',
           valueMode: 'array',
-          value: uniqueValues(Array.isArray(rawValue) ? rawValue : [elementName]),
+          value: normalizeArraySourceValue(rawValue, [elementName]),
           options: uniqueValues([elementName]),
           screenAfter: screenAfter.has(String(elementId)),
           deleted: skipElements.has(String(elementId)),
@@ -1183,11 +1489,14 @@ const buildOperationJsonItems = (sourceJson = '') => {
     }
 
     const rawValue = source[paramKey] ?? source[elementName] ?? source[String(elementId)]
-    const nthValue = hasNthRemark(remark) ? getNthRemarkValue(remark) : ''
+    const hasNth = hasTemplateNth(template, remark)
+    const nthValue = hasNth ? getTemplateNthValue(template, remark) : ''
+    const legacyNthValue = hasNth && rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '' && !Number.isNaN(Number(rawValue))
     const buttonTemplate = isButtonTemplate(template)
+    const nameEditable = operation === 1
     const valueMode = operation === 2
       ? 'textarea'
-      : (operation === 4 ? 'path' : (hasNthRemark(remark) ? 'number' : (buttonTemplate ? 'text' : 'none')))
+      : (operation === 4 ? 'path' : (hasNth ? 'number' : (buttonTemplate ? 'text' : 'none')))
     const defaultValue = operation === 4 ? getTemplateDefaultValue(template) : ''
     items.push({
       key: `template_${elementId}`,
@@ -1198,7 +1507,10 @@ const buildOperationJsonItems = (sourceJson = '') => {
       elementTypeLabel: buttonTemplate ? '按钮' : getOptionLabel(elementTypeOptions, elementType),
       operationLabel: getOptionLabel(operationOptions, operation),
       valueMode,
-      value: rawValue ?? (hasNthRemark(remark) ? nthValue : defaultValue),
+      nameEditable,
+      value: legacyNthValue ? defaultValue : (rawValue ?? defaultValue),
+      nthValue: nthElements[String(elementId)] ?? (legacyNthValue ? Number(rawValue) : (hasNth ? nthValue : '')),
+      defaultNthValue: hasNth ? nthValue : '',
       options: [],
       screenAfter: screenAfter.has(String(elementId)),
       deleted: skipElements.has(String(elementId)),
@@ -1265,6 +1577,170 @@ const loadElementTemplates = async () => {
   }
 }
 
+const normalizeListData = (data) => {
+  if (Array.isArray(data)) return data
+  return data?.items || data?.list || data?.records || []
+}
+
+const loadAllPagedOptions = async (apiMethod, params = {}) => {
+  const pageSize = 100
+  let pageNum = 1
+  const result = []
+  while (true) {
+    const res = await apiMethod({ ...params, pageNum, pageSize })
+    const data = res.data || {}
+    const rows = normalizeListData(data)
+    result.push(...rows)
+    const total = Number(data.total || result.length)
+    if (result.length >= total || rows.length < pageSize) {
+      break
+    }
+    pageNum += 1
+  }
+  return result
+}
+
+const loadExceptionCaseOptions = async () => {
+  try {
+    exceptionCaseOptions.value = await loadAllPagedOptions(exceptionCaseTypeApi.getExceptionCaseTypeList)
+  } catch (error) {
+    exceptionCaseOptions.value = []
+    console.error('加载异常类型失败:', error)
+  }
+}
+
+const clearGeneratePreview = () => {
+  generatePreview.value = null
+  generatePreviewItems.value = []
+}
+
+const buildExceptionLabel = (item = {}) => {
+  const exceptionName = item.exceptionName || item.exception_name || item.exceptionId
+  const operationType = item.operationType ?? item.operation_type ?? 0
+  return `${exceptionName}（${getOperationTypeName(operationType)}）`
+}
+
+const buildGeneratePayload = () => ({
+  targetId: pageId,
+  operationType: generateForm.operationType,
+  templateIds: generateForm.templateIds,
+  exceptionIds: generateForm.exceptionIds,
+  includeCommon: true,
+  overwrite: generateForm.overwrite
+})
+
+const handleOpenGenerateDialog = async () => {
+  generateDialogVisible.value = true
+  clearGeneratePreview()
+  generateForm.operationType = null
+  generateForm.templateIds = []
+  generateForm.exceptionIds = []
+  generateForm.overwrite = false
+  if (!elementTemplates.value.length) {
+    await loadElementTemplates()
+  }
+  if (!exceptionCaseOptions.value.length) {
+    await loadExceptionCaseOptions()
+  }
+}
+
+const handlePreviewGeneratedCases = async () => {
+  generateLoading.value = true
+  try {
+    const res = await caseGenerateApi.previewPageCases(buildGeneratePayload())
+    if (handleApiResponse(res, '预览成功', '预览失败')) {
+      generatePreview.value = res.data
+      generatePreviewItems.value = res.data?.items || []
+    }
+  } finally {
+    generateLoading.value = false
+  }
+}
+
+const handleGeneratedCaseOperationChange = (value) => {
+  generatedCaseForm.operationTypeName = getOperationTypeName(value)
+}
+
+const handleEditGeneratedCase = (row, index) => {
+  generatedCaseEditIndex.value = index
+  generatedCaseDialogTitle.value = '编辑预览用例'
+  Object.assign(generatedCaseForm, {
+    caseName: row.caseName || '',
+    targetId: row.targetId || pageId,
+    templateId: row.templateId || null,
+    templateName: row.templateName || '',
+    exceptionId: row.exceptionId || null,
+    exceptionName: row.exceptionName || '',
+    operationType: row.operationType || generatePreview.value?.operationType || 1,
+    operationTypeName: row.operationTypeName || getOperationTypeName(row.operationType || 1),
+    payloadText: formatJson(row.payload),
+    exists: !!row.exists
+  })
+  generatedCaseDialogVisible.value = true
+}
+
+const handleDeleteGeneratedCase = (index) => {
+  generatePreviewItems.value.splice(index, 1)
+  refreshGeneratePreviewStats()
+}
+
+const refreshGeneratePreviewStats = () => {
+  if (!generatePreview.value) {
+    return
+  }
+  generatePreview.value.total = generatePreviewItems.value.length
+  generatePreview.value.existsCount = generatePreviewItems.value.filter(item => item.exists).length
+}
+
+const handleGeneratedCaseSubmit = () => {
+  let payload
+  try {
+    payload = JSON.parse(generatedCaseForm.payloadText)
+  } catch (error) {
+    ElMessage.error('操作JSON格式错误')
+    return
+  }
+  const item = {
+    caseName: generatedCaseForm.caseName,
+    targetId: generatedCaseForm.targetId || pageId,
+    templateId: generatedCaseForm.templateId || 0,
+    templateName: generatedCaseForm.templateName || '-',
+    exceptionId: generatedCaseForm.exceptionId || 0,
+    exceptionName: generatedCaseForm.exceptionName || '-',
+    operationType: generatedCaseForm.operationType || generatePreview.value?.operationType || 1,
+    operationTypeName: generatedCaseForm.operationTypeName || getOperationTypeName(generatedCaseForm.operationType),
+    payload,
+    exists: generatedCaseForm.exists
+  }
+  if (generatedCaseEditIndex.value >= 0) {
+    generatePreviewItems.value.splice(generatedCaseEditIndex.value, 1, item)
+  } else {
+    generatePreviewItems.value.push(item)
+  }
+  refreshGeneratePreviewStats()
+  generatedCaseDialogVisible.value = false
+}
+
+const handleSaveGeneratedCases = async () => {
+  if (!generatePreviewItems.value.length) {
+    ElMessage.warning('请先预览生成用例')
+    return
+  }
+  generateSaving.value = true
+  try {
+    const res = await caseGenerateApi.savePageCases({
+      ...buildGeneratePayload(),
+      items: generatePreviewItems.value
+    })
+    if (handleApiResponse(res, '保存成功', '保存失败')) {
+      generateDialogVisible.value = false
+      instanceTableRef.value?.refresh()
+    }
+  } finally {
+    generateSaving.value = false
+  }
+}
+
 const resetElementForm = () => {
   Object.assign(elementForm, {
     elementId: null,
@@ -1272,10 +1748,12 @@ const resetElementForm = () => {
     pageId,
     locatorType: 5,
     elementValue: '',
+    defaultValue: '',
+    parentElement: '',
     elementType: 1,
     operation: 1,
     remark: '',
-    status: 1
+    status: 0
   })
 }
 
@@ -1286,10 +1764,12 @@ const fillElementForm = (row) => {
     pageId,
     locatorType: row.locatorType ?? 5,
     elementValue: row.elementValue || '',
+    defaultValue: row.defaultValue || '',
+    parentElement: row.parentElement || '',
     elementType: row.elementType ?? 1,
     operation: row.operation ?? 1,
     remark: row.remark || '',
-    status: row.status ?? 1
+    status: row.status ?? 0
   })
 }
 
@@ -1298,6 +1778,8 @@ const buildElementPayload = () => ({
   pageId,
   locatorType: elementForm.locatorType,
   elementValue: elementForm.elementValue,
+  defaultValue: elementForm.defaultValue,
+  parentElement: elementForm.parentElement,
   elementType: elementForm.elementType,
   operation: elementForm.operation,
   remark: elementForm.remark,
@@ -1368,12 +1850,19 @@ const handleSelectedTokenChange = (tokenId) => {
   }
 }
 
+const getRunTokenId = (row = {}) => {
+  if (selectedInstance.value?.pageInstanceId === row.pageInstanceId) {
+    return selectedInstance.value.tokenId || null
+  }
+  return normalizeInstanceTokenId(row)
+}
+
 const handleRunInstance = (row) => {
   if (isInstanceRunning(row.pageInstanceId) || batchRunning.value) {
     return
   }
   setInstanceRunning(row.pageInstanceId, true)
-  const tokenId = row.tokenId || selectedInstance.value?.tokenId || normalizeInstanceTokenId(row)
+  const tokenId = getRunTokenId(row)
   executePageTestCase(pageId, row.pageInstanceId, tokenId)
     .then(async (res) => {
       if (handleApiResponse(res, '运行成功', '运行失败')) {
@@ -1437,7 +1926,7 @@ const resetInstanceForm = () => {
     expectResult: '',
     description: '',
     remark: '',
-    status: 1
+    status: 0
   })
 }
 
@@ -1466,7 +1955,7 @@ const handleEditInstance = (row) => {
     expectResult: row.expectResult || '',
     description: row.description || '',
     remark: row.remark || '',
-    status: row.status ?? 1
+    status: 0
   })
   buildOperationJsonItems(instanceForm.operationJson)
   instanceDialogVisible.value = true
@@ -1551,8 +2040,7 @@ const handleSubmitInstance = async () => {
       operationJson: normalizeJsonObject(instanceForm.operationJson),
       expectResult: instanceForm.expectResult,
       description: instanceForm.description,
-      remark: instanceForm.remark,
-      status: instanceForm.status
+      remark: instanceForm.remark
     }
     const isEdit = instanceMode.value === 'edit'
     const res = isEdit
@@ -1780,6 +2268,10 @@ onMounted(async () => {
   min-width: 0;
 }
 
+:deep(.el-form-item:has(.el-radio-group[style*="display: none"])) {
+  display: none;
+}
+
 .operation-list {
   display: grid;
   gap: 10px;
@@ -1817,6 +2309,24 @@ onMounted(async () => {
   color: #303133;
 }
 
+.operation-name-input {
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.operation-name-input:hover,
+.operation-name-input:focus {
+  border-color: #409eff;
+  background: #fff;
+}
+
 .operation-control,
 .operation-json-raw {
   width: 100%;
@@ -1850,6 +2360,12 @@ onMounted(async () => {
 
 .script-editor {
   font-family: Consolas, 'Courier New', monospace;
+}
+
+.generate-option-extra {
+  float: right;
+  color: #909399;
+  font-size: 12px;
 }
 </style>
 

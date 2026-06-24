@@ -15,8 +15,8 @@
       :show-edit="false"
     >
       <template #resultStatus="{ row }">
-        <el-tag :type="getResultStatusType(row.resultStatus)">
-          {{ getResultStatusText(row.resultStatus) }}
+        <el-tag :type="getResultStatusType(row)">
+          {{ getResultStatusText(row) }}
         </el-tag>
       </template>
       
@@ -132,6 +132,11 @@ const columns = [
     width: 100, 
     slot: 'resultStatus' 
   },
+  {
+    prop: 'code',
+    label: 'Code',
+    width: 90
+  },
   { 
     prop: 'remark', 
     label: '结果备注', 
@@ -197,7 +202,19 @@ const handleSelectionChange = (rows) => {
 }
 
 // 获取结果状态类型
-const getResultStatusType = (status) => {
+const normalizeResultStatus = (rowOrStatus) => {
+  if (rowOrStatus && typeof rowOrStatus === 'object') {
+    const code = Number(rowOrStatus.code)
+    if (!Number.isNaN(code)) {
+      return code === 200 ? 1 : 2
+    }
+    return rowOrStatus.resultStatus
+  }
+  return rowOrStatus
+}
+
+const getResultStatusType = (rowOrStatus) => {
+  const status = normalizeResultStatus(rowOrStatus)
   const map = {
     1: 'success',
     2: 'danger',
@@ -208,7 +225,8 @@ const getResultStatusType = (status) => {
 }
 
 // 获取结果状态文本
-const getResultStatusText = (status) => {
+const getResultStatusText = (rowOrStatus) => {
+  const status = normalizeResultStatus(rowOrStatus)
   const map = {
     1: '正常',
     2: '异常',

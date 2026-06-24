@@ -22,6 +22,7 @@ class ApiTemplateBase(BaseModel):
     field_name: Optional[str] = Field(None, description="字段名称")
     field_type: Optional[int] = Field(None, description="字段类型")
     field_size: Optional[int] = Field(None, description="字段大小")
+    default_value: Optional[str] = Field(None, description="默认值")
     is_unique: Optional[str] = Field(None, description="唯一")
     is_required: Optional[str] = Field(None, description="非空")
     api_id: Optional[int] = Field(None, description="接口id")
@@ -65,6 +66,23 @@ class ApiTemplateCreate(ApiTemplateBase):
 class ApiTemplateUpdate(ApiTemplateBase):
     """接口模板更新Schema"""
     template_id: int = Field(..., description="主键")
+
+
+class ApiTemplateJsonParse(BaseModel):
+    """JSON解析生成参数模板Schema"""
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True
+    )
+
+    api_id: int = Field(..., description="接口ID")
+    json_text: str = Field(..., description="JSON内容")
+
+
+class ApiTemplateBatchDelete(BaseModel):
+    """参数模板批量删除Schema"""
+    ids: list[int] = Field(..., description="主键列表")
 
 
 class ApiTemplateInfo(ApiTemplateBase):

@@ -15,6 +15,7 @@ class ApiTemplate(Base):
     field_name = Column(String(50), comment="字段名称")
     field_type = Column(SmallInteger, comment="字段类型")
     field_size = Column(Integer, comment="字段大小")
+    default_value = Column(Text, comment="默认值")
     is_required = Column(String(10), comment="非空")
     is_unique = Column(Boolean, comment="唯一")
     api_id = Column(BigInteger, comment="接口id")

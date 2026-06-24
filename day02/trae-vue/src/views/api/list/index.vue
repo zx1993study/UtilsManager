@@ -127,7 +127,7 @@
           <el-option
             v-for="item in tokenOptions"
             :key="item.tokenId"
-            :label="item.name"
+            :label="item.tokenName || item.name"
             :value="item.tokenId"
           />
         </el-select>
@@ -209,7 +209,7 @@
           <el-option
             v-for="item in tokenOptions"
             :key="item.tokenId"
-            :label="item.name"
+            :label="item.tokenName || item.name"
             :value="item.tokenId"
           />
         </el-select>
@@ -223,7 +223,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive } from 'vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -340,11 +340,26 @@ const getMethodTypeColor = (type) => {
   return colors[type] || 'info'
 }
 
+const getRowProjectId = (row = {}) => row.projectId ?? row.project_id ?? null
+
+const normalizeProjectOption = (item = {}) => ({
+  projectId: item.projectId ?? item.project_id,
+  projectName: item.projectName ?? item.project_name ?? item.name
+})
+
+const normalizeTokenOption = (item = {}) => ({
+  tokenId: item.tokenId ?? item.token_id,
+  tokenName: item.tokenName ?? item.token_name ?? item.name,
+  tokenType: item.tokenType ?? item.token_type
+})
+
 const normalizeTokenIds = (row = {}) => {
-  if (Array.isArray(row.tokenIds)) {
-    return row.tokenIds.filter(Boolean)
+  const tokenIds = Array.isArray(row.tokenIds) ? row.tokenIds : row.token_ids
+  if (Array.isArray(tokenIds)) {
+    return tokenIds.filter(Boolean)
   }
-  return row.tokenId ? [row.tokenId] : []
+  const tokenId = row.tokenId ?? row.token_id
+  return tokenId ? [tokenId] : []
 }
 
 const buildApiPayload = (data) => {
@@ -363,17 +378,19 @@ const loadApiTokenOptions = async (projectId) => {
     tokenOptions.value = []
     return
   }
-  const res = await tokenApi.getTokenOptions({
+  const res = await tokenApi.getTokenSelectOptions({
     projectId,
     tokenType: API_TOKEN_TYPE,
   })
   tokenOptions.value = getListItems(res)
+    .map(normalizeTokenOption)
+    .filter(item => item.tokenId !== undefined && item.tokenId !== null)
 }
 
 const keepAvailableTokenIds = (targetForm) => {
-  const availableIds = new Set(tokenOptions.value.map(item => item.tokenId))
+  const availableIds = new Set(tokenOptions.value.map(item => Number(item.tokenId)))
   const tokenIds = Array.isArray(targetForm.tokenIds)
-    ? targetForm.tokenIds.filter(tokenId => availableIds.has(tokenId))
+    ? targetForm.tokenIds.filter(tokenId => availableIds.has(Number(tokenId)))
     : []
   targetForm.tokenIds = tokenIds
   targetForm.tokenId = tokenIds[0] || null
@@ -382,14 +399,21 @@ const keepAvailableTokenIds = (targetForm) => {
 // 加载项目下拉列表
 const loadProjectOptions = async () => {
   try {
-    const res = await projectApi.getProjectList({ page: 1, pageSize: 1000 })
+    const res = await projectApi.getProjectSelectOptions()
     projectOptions.value = getListItems(res)
+      .map(normalizeProjectOption)
+      .filter(item => item.projectId !== undefined && item.projectId !== null)
   } catch (error) {
     console.error('加载项目列表失败:', error)
   }
 }
 
 // 项目切换时加载Token列表
+const ensureProjectOptions = async () => {
+  if (projectOptions.value.length) return
+  await loadProjectOptions()
+}
+
 const handleProjectChange = async (projectId) => {
   // 清空已选的Token
   formData.tokenId = null
@@ -423,7 +447,8 @@ const handleCopyProjectChange = async (projectId) => {
 }
 
 // 处理新增
-const handleAdd = () => {
+const handleAdd = async () => {
+  await ensureProjectOptions()
   dialogTitle.value = '新增API'
   resetForm()
   tokenOptions.value = []
@@ -432,16 +457,18 @@ const handleAdd = () => {
 
 // 处理编辑
 const handleEdit = async (row) => {
+  await ensureProjectOptions()
   dialogTitle.value = '编辑API'
-  Object.assign(formData, row)
+  const projectId = getRowProjectId(row)
+  Object.assign(formData, row, { projectId })
   formData.tokenIds = normalizeTokenIds(row)
   formData.tokenId = formData.tokenIds[0] || null
   dialogVisible.value = true
 
   // 如果已有项目ID，加载对应的Token列表
-  if (row.projectId) {
+  if (projectId) {
     try {
-      await loadApiTokenOptions(row.projectId)
+      await loadApiTokenOptions(projectId)
       keepAvailableTokenIds(formData)
     } catch (error) {
       console.error('加载Token列表失败:', error)
@@ -469,7 +496,9 @@ const handleDelete = (row) => {
 
 // 处理复制
 const handleCopy = async (row) => {
+  await ensureProjectOptions()
   const tokenIds = normalizeTokenIds(row)
+  const projectId = getRowProjectId(row)
   // 填充复制表单数据
   Object.assign(copyFormData, {
     apiId: null, // 清空ID，因为是新增
@@ -478,15 +507,15 @@ const handleCopy = async (row) => {
     methodType: row.methodType,
     paramsPath: row.paramsPath,
     requestHeader: row.requestHeader,
-    projectId: row.projectId,
+    projectId,
     tokenId: tokenIds[0] || null,
     tokenIds,
     remark: row.remark
   })
   
   // 加载Token列表
-  if (row.projectId) {
-    await handleCopyProjectChange(row.projectId)
+  if (projectId) {
+    await handleCopyProjectChange(projectId)
     copyFormData.tokenIds = tokenIds
     copyFormData.tokenId = tokenIds[0] || null
   }
@@ -603,10 +632,6 @@ const handleMoreCommand = (command, row) => {
   actions[command]?.(row)
 }
 
-// 页面加载时获取项目列表
-onMounted(() => {
-  loadProjectOptions()
-})
 </script>
 
 <style scoped>

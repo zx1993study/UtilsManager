@@ -118,6 +118,8 @@ async def get_page_instances_by_page_ids(db: Session, page_ids: List[int]) -> Li
 
 async def create_page_instance(db: Session, data: dict) -> PageInstance:
     """创建页面实例"""
+    data.setdefault("exec_count", 0)
+    data.setdefault("status", 0)
     data = set_audit_fields_for_create(data)
     db_obj = PageInstance(**data)
     db.add(db_obj)
@@ -148,7 +150,7 @@ async def update_page_instance_execute_state(
     db_obj = db.query(PageInstance).filter(PageInstance.page_instance_id == page_instance_id).first()
     if db_obj:
         db_obj.exec_count = (db_obj.exec_count or 0) + 1
-        db_obj.status = 1 if success else 0
+        db_obj.status = 1 if success else 2
         if screen_photo_file is not None:
             db_obj.screen_photo_file = screen_photo_file
         db_obj.update_time = datetime.now()

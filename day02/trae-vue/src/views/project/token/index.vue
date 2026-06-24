@@ -328,7 +328,7 @@ const getListItems = (res) => res.data?.items || res.data?.list || res.data || [
 
 const loadProjectOptions = async () => {
   try {
-    const res = await projectApi.getProjectList({ pageNum: 1, pageSize: 100 })
+    const res = await projectApi.getProjectSelectOptions()
     projectOptions.value = getListItems(res)
   } catch (error) {
     console.error('加载项目列表失败:', error)

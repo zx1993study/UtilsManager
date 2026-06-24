@@ -39,6 +39,23 @@ async def get_api_tokens(db: Session, api_id: int) -> List[TokenInfo]:
     ).order_by(ApiTokenInfo.id.asc()).all()
 
 
+async def get_api_tokens_map(db: Session, api_ids: Iterable[int]) -> dict[int, List[TokenInfo]]:
+    ids = _normalize_token_ids(api_ids)
+    if not ids:
+        return {}
+
+    rows = db.query(ApiTokenInfo.api_id, TokenInfo).join(
+        TokenInfo, ApiTokenInfo.token_id == TokenInfo.token_id
+    ).filter(
+        ApiTokenInfo.api_id.in_(ids)
+    ).order_by(ApiTokenInfo.api_id.asc(), ApiTokenInfo.id.asc()).all()
+
+    token_map = {api_id: [] for api_id in ids}
+    for api_id, token in rows:
+        token_map.setdefault(api_id, []).append(token)
+    return token_map
+
+
 async def set_api_token_infos(db: Session, api_id: int, token_ids: Iterable[int] | None) -> None:
     db.query(ApiTokenInfo).filter(ApiTokenInfo.api_id == api_id).delete(synchronize_session=False)
     for token_id in _normalize_token_ids(token_ids):

@@ -12,6 +12,7 @@ from time import monotonic
 
 from sqlalchemy.orm import Session
 
+from core.logger import logger
 from core.responsemsg import error_response, success_response
 from mysql.dict_info_sql import get_active_dict_info_by_key
 from mysql.element_template_sql import (
@@ -284,6 +285,32 @@ def _apply_value_marks(params: dict, exec_count: int | None = 0) -> dict:
     return result
 
 
+def _screen_targets(params: dict, key: str) -> list[str]:
+    raw_value = params.get(key) if isinstance(params, dict) else None
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, (list, tuple, set)):
+        values = raw_value
+    else:
+        values = str(raw_value).split(",")
+    return [
+        str(value).strip()
+        for value in values
+        if value is not None and str(value).strip() != ""
+    ]
+
+
+def _fallback_screenshot_element_id(params: dict, templates: list) -> str:
+    targets = _screen_targets(params, "screenAfter") or _screen_targets(params, "screenBefore")
+    if targets:
+        return targets[-1]
+    if templates:
+        element_id = getattr(templates[-1], "element_id", None)
+        if element_id is not None:
+            return str(element_id)
+    return "unknown"
+
+
 def _literal_arg(node: ast.AST | None):
     if node is None:
         return None
@@ -322,13 +349,14 @@ def _operation_from_name(name: str) -> int | None:
     }.get(name)
 
 
-def _operation_default_value(call: ast.Call, operation: int) -> str | None:
-    if operation != OP_UPLOAD:
-        return None
-    value = _literal_arg(call.args[0]) if call.args else None
-    if value is None:
-        return None
-    return str(value)
+def _operation_default_value(call: ast.Call, operation: int, nth_value: int | None = None) -> str | None:
+    if operation in (OP_FILL, OP_UPLOAD):
+        value = _literal_arg(call.args[0]) if call.args else None
+        if value is not None:
+            return str(value)
+    if nth_value is not None:
+        return str(nth_value)
+    return None
 
 
 def _element_type_from_locator(locator_type: int, operation: int, role: str | None = None) -> int:
@@ -452,6 +480,8 @@ def _extract_nth_value(node: ast.AST) -> int | None:
     current = node
     while True:
         if isinstance(current, ast.Attribute):
+            if current.attr == "first":
+                return 0
             current = current.value
             continue
         if not isinstance(current, ast.Call):
@@ -467,8 +497,38 @@ def _extract_nth_value(node: ast.AST) -> int | None:
         current = current.func.value
 
 
+def _source_segment(lines: list[str], node: ast.AST) -> str:
+    start = getattr(node, "lineno", None)
+    end = getattr(node, "end_lineno", None)
+    if not start:
+        return ""
+    if not end:
+        end = start
+    return "\n".join(lines[start - 1:end]).strip()
+
+
+def _parent_element_value(parents: list[dict], nth_value: int | None) -> str | None:
+    parent_items = [
+        {
+            "element_name": parent.get("element_name"),
+            "locator_type": parent.get("locator_type"),
+            "element_value": parent.get("element_value"),
+        }
+        for parent in parents
+    ]
+    payload: dict[str, object] = {}
+    if parent_items:
+        payload["parents"] = parent_items
+    if nth_value is not None:
+        payload["nth"] = nth_value
+    if not payload:
+        return None
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def _parse_codegen_script_rows(page_id: int, script_content: str) -> list[dict]:
     tree = ast.parse(script_content)
+    script_lines = script_content.splitlines()
     rows = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
@@ -487,37 +547,8 @@ def _parse_codegen_script_rows(page_id: int, script_content: str) -> list[dict]:
         locator = chain[-1]
         parents = chain[:-1]
         role = locator.get("role")
-        element_items = [
-            {
-                "elementName": parent.get("element_name"),
-                "elementValue": parent.get("element_value"),
-                "elementType": parent.get("locator_type"),
-            }
-            for parent in parents
-        ]
         nth_value = _extract_nth_value(node.value.func.value)
-        default_value = _operation_default_value(node.value, operation)
-        remark_value: object = []
-        if nth_value is not None and element_items:
-            remark_value = {"element": element_items, "nth": nth_value}
-        elif nth_value is not None:
-            remark_value = [{"nth": nth_value}]
-        elif element_items:
-            remark_value = [
-                {
-                    "element_name": parent.get("element_name"),
-                    "locator_type": parent.get("locator_type"),
-                    "element_value": parent.get("element_value"),
-                }
-                for parent in parents
-            ]
-        if default_value is not None:
-            if isinstance(remark_value, dict):
-                remark_value["defaultValue"] = default_value
-            elif element_items:
-                remark_value = {"element": element_items, "defaultValue": default_value}
-            else:
-                remark_value = {"defaultValue": default_value}
+        default_value = _operation_default_value(node.value, operation, nth_value)
 
         rows.append(
             {
@@ -525,10 +556,12 @@ def _parse_codegen_script_rows(page_id: int, script_content: str) -> list[dict]:
                 "page_id": page_id,
                 "locator_type": locator["locator_type"],
                 "element_value": locator["element_value"],
+                "default_value": default_value,
+                "parent_element": _parent_element_value(parents, nth_value),
                 "element_type": _element_type_from_locator(locator["locator_type"], operation, role=role),
                 "status": 1,
                 "operation": operation,
-                "remark": json.dumps(remark_value, ensure_ascii=False),
+                "remark": _source_segment(script_lines, node),
                 "creator": "page_inspector",
             }
         )
@@ -762,7 +795,8 @@ async def execute_page_by_element_templates(
 
             for attempt_index in range(total_attempts):
                 ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
-                screenshot_name = f"{instance.page_instance_id}_{ts}.png"
+                fallback_element_id = _fallback_screenshot_element_id(params, templates)
+                screenshot_name = f"{fallback_element_id}_{ts}.png"
                 screenshot = os.path.join(shot_dir, screenshot_name)
                 attempt_screenshot_paths = []
                 try:
@@ -774,7 +808,6 @@ async def execute_page_by_element_templates(
                         screenshot_path=screenshot,
                         token_json_path=token_json_path,
                         screenshot_dir=shot_dir,
-                        screenshot_prefix=f"{instance.page_instance_id}_{ts}",
                         screenshot_collector=attempt_screenshot_paths,
                     )
                     screenshot_paths = attempt_screenshot_paths
@@ -784,6 +817,13 @@ async def execute_page_by_element_templates(
                         response_info = f"retry attempt {attempt_index} success\n{response_info}"
                     break
                 except Exception as e:
+                    logger.exception(
+                        "页面模板执行异常: page_id=%s, page_instance_id=%s, attempt=%s/%s",
+                        page_id,
+                        instance.page_instance_id,
+                        attempt_index + 1,
+                        total_attempts,
+                    )
                     screenshot_paths = attempt_screenshot_paths
                     success = False
                     response_info = str(e)

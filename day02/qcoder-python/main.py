@@ -12,67 +12,18 @@ from starlette.responses import JSONResponse
 
 from api.v1 import api_router
 from core.config import settings
-from core.db import Base, engine
 from core.logger import logger
 from core.responsemsg import error_response
 from core.schema_migrations import ensure_runtime_schema
-from models.api_token_info_model import ApiTokenInfo as _ApiTokenInfo
-from models.page_token_info_model import PageTokenInfo as _PageTokenInfo
 from service.system_log_service import cleanup_old_logs, periodic_log_cleanup
-
-Base.metadata.create_all(bind=engine)
-ensure_runtime_schema()
-
-
-def _seed_default_users():
-    """首次启动时写入默认账号，保证登录开箱可用。"""
-    try:
-        from datetime import datetime
-
-        from core.db import SessionLocal
-        from core.jwt import get_password_hash
-        from models.sys_user_model import SysUser
-
-        db = SessionLocal()
-        try:
-            if db.query(SysUser).count() == 0:
-                now = datetime.now()
-                db.add_all([
-                    SysUser(
-                        username="admin",
-                        password=get_password_hash("admin123"),
-                        nickname="管理员",
-                        status=1,
-                        creator="system",
-                        create_time=now,
-                        update_time=now,
-                    ),
-                    SysUser(
-                        username="test_user",
-                        password=get_password_hash("test123"),
-                        nickname="测试用户",
-                        status=1,
-                        creator="system",
-                        create_time=now,
-                        update_time=now,
-                    ),
-                ])
-                db.commit()
-                logger.info("已播种默认账号：admin / test_user")
-        finally:
-            db.close()
-    except Exception as exc:
-        logger.warning(f"默认账号播种跳过：{exc}")
-
-
-_seed_default_users()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_runtime_schema()
     await cleanup_old_logs()
     cleanup_task = asyncio.create_task(periodic_log_cleanup())
-    logger.info("应用启动...")
+    logger.info("应用启动完成")
     try:
         yield
     finally:
@@ -81,12 +32,12 @@ async def lifespan(app: FastAPI):
             await cleanup_task
         except asyncio.CancelledError:
             pass
-        logger.info("应用关闭...")
+        logger.info("应用关闭")
 
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="这是一个基于 FastAPI 的 API 服务",
+    description="基于 FastAPI 的自动化测试服务",
     version=settings.APP_VERSION,
     openapi_url="/openapi.json",
     docs_url="/docs",
@@ -148,6 +99,7 @@ async def exception_handling_middleware(request: Request, call_next):
                 msg="服务器内部错误",
                 data=None,
                 error=str(exc),
+                log_exception=False,
             ),
         )
 
@@ -159,7 +111,7 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"message": f"{settings.APP_NAME} API服务"}
+    return {"message": f"{settings.APP_NAME} API 服务"}
 
 
 @app.exception_handler(Exception)
@@ -172,6 +124,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         msg="服务器内部错误",
         data=None,
         error=str(exc),
+        log_exception=False,
     )
 
 
